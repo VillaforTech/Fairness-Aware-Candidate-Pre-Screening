@@ -44,6 +44,7 @@ DEFAULT_CONFIG_DIR = "configs"
 # CONFIGURATION CLASSES
 # ============================================================================
 
+
 @dataclass
 class DataConfig:
     """Data configuration."""
@@ -124,6 +125,7 @@ class Config:
 # SEED MANAGEMENT
 # ============================================================================
 
+
 def set_seed(seed: int) -> None:
     """
     Set random seed for reproducibility across all libraries.
@@ -179,6 +181,7 @@ def get_random_state(config: Config | None = None) -> int:
 # CONFIG LOADING
 # ============================================================================
 
+
 def load_yaml_config(path: str | Path) -> dict[str, Any]:
     """
     Load configuration from YAML file.
@@ -196,7 +199,9 @@ def load_yaml_config(path: str | Path) -> dict[str, Any]:
     try:
         import yaml
     except ImportError:
-        raise ImportError("PyYAML is required for loading config files. Install with: pip install pyyaml")
+        raise ImportError(
+            "PyYAML is required for loading config files. Install with: pip install pyyaml"
+        ) from None
 
     path = Path(path)
     if not path.exists():
@@ -272,6 +277,17 @@ def load_config(path: str | Path | None = None) -> Config:
     return config_from_dict(data)
 
 
+def _convert_tuples_to_lists(obj: Any) -> Any:
+    """Recursively convert tuples to lists for YAML serialization."""
+    if isinstance(obj, tuple):
+        return [_convert_tuples_to_lists(item) for item in obj]
+    elif isinstance(obj, list):
+        return [_convert_tuples_to_lists(item) for item in obj]
+    elif isinstance(obj, dict):
+        return {key: _convert_tuples_to_lists(value) for key, value in obj.items()}
+    return obj
+
+
 def save_config(config: Config, path: str | Path) -> None:
     """
     Save configuration to YAML file.
@@ -286,7 +302,9 @@ def save_config(config: Config, path: str | Path) -> None:
     try:
         import yaml
     except ImportError:
-        raise ImportError("PyYAML is required for saving config files. Install with: pip install pyyaml")
+        raise ImportError(
+            "PyYAML is required for saving config files. Install with: pip install pyyaml"
+        ) from None
 
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -303,6 +321,9 @@ def save_config(config: Config, path: str | Path) -> None:
         "fairness": asdict(config.fairness),
         "output": asdict(config.output),
     }
+
+    # Convert tuples to lists for safe YAML serialization
+    data = _convert_tuples_to_lists(data)
 
     with open(path, "w") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False)
