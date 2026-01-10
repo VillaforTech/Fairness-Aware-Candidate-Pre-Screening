@@ -1,260 +1,245 @@
 # Fairness-Aware Candidate Pre-Screening
 
-This project investigates **fairness in an automated hiring pre-screening system** using the Adult (Census Income) dataset. We simulate a large company that receives thousands of online job applications and uses a model as a **first filter** to spot candidates who are likely to have higher earning potential (a proxy for seniority and experience).
+A production-grade machine learning pipeline for fair candidate pre-screening with bias mitigation. This project demonstrates best practices for fairness-aware ML, including proper evaluation protocols, model persistence, and deployment interfaces.
 
-In this setup:
+## Overview
 
-- Applicants **predicted to have income `>50K`** are **fast-tracked for human review and interviews**.
-- Applicants **predicted `<=50K`** are **deprioritized** and receive fewer or no interview opportunities.
+This project investigates **fairness in an automated hiring pre-screening system** using the Adult (Census Income) dataset. We simulate a company that uses ML to identify candidates likely to have higher earning potential:
 
-If the model **systematically underestimates** women or non-white candidates, they are invited to interviews **less often**, reinforcing inequality in who advances to better-paid positions and leadership tracks.
+- Candidates predicted `>50K` are **fast-tracked for interviews**
+- Candidates predicted `<=50K` are **deprioritized**
 
-This repository was developed for the *Trustworthy Machine Learning 2025 – Task 3 (Fairness-aware ML)* course project.
+If the model systematically underestimates certain groups, this creates unfair barriers to opportunity.
 
----
+## Key Features
 
-## Problem Setting
+- **Leakage-free evaluation**: EO thresholds tuned on validation, evaluated on test
+- **Multiple fairness metrics**: SPD, DI, TPR Gap, Equalized Odds
+- **Model registry**: Save, load, and manage trained models
+- **CLI interface**: Easy-to-use command-line tools
+- **API deployment**: FastAPI with Docker support
+- **Drift monitoring**: Track data and fairness drift over time
 
-A large company wants to quickly identify promising candidates among a very large pool of online applicants. To reduce manual workload, it deploys an ML model as a **pre-screening tool**:
+## Quick Start
 
-- **Input:** demographic and employment-like features (age, education, occupation, work hours, etc.), similar to census data.
-- **Output:** a binary prediction of whether the candidate is likely to have an annual income **above 50K**.
-- **Decision rule:**
-  - If predicted `>50K` → candidate is **fast-tracked for human review and interviews**.
-  - If predicted `<=50K` → candidate is **not prioritized**, and may never be seen by a recruiter.
-
-This is a **high-stakes** decision: being fast-tracked strongly affects who gets access to interviews, job offers, and ultimately higher salaries.
-
-Fairness concerns:
-
-- If the model **underestimates** the likelihood of high income for women or non-white candidates, they receive **fewer interview invitations**.
-- Over time, this can **lock underrepresented groups out** of senior, better-paid roles and leadership positions.
-- The model may appear accurate overall, yet **unfairly benefit privileged groups** if fairness metrics are not examined.
-
-Our project uses the Adult dataset to simulate this scenario and to study how standard ML models behave when used as a **candidate pre-screening filter**, and how post-processing can mitigate unfair treatment between groups.
-
----
-
-## Project Goals
-
-- **Measure discrimination** present in the dataset and in standard classifiers when they are used as a hiring pre-screening tool.
-- Train baseline models (Logistic Regression, Random Forest, XGBoost) and report both:
-  - **Predictive performance metrics**, and
-  - **Fairness metrics** across demographic groups.
-- Apply **Equal Opportunity post-processing** to reduce disparities between privileged and unprivileged groups **without retraining** the models.
-- Provide **transparent, reproducible experiments** to analyze the trade-off between **accuracy** and **group fairness** in a realistic pre-screening pipeline.
-
----
-
-## Dataset
-
-- **Source:** UCI Adult (Census Income) dataset.  
-- **Size:** ~50k individuals with demographic and employment attributes and a binary income label (`>50K` / `<=50K`).  
-
-### Task interpretation in this project
-
-We keep the original binary label, but reinterpret it for hiring:
-
-- `income > 50K` → candidate is treated as **“high-earning / higher-seniority profile”**, and thus **fast-tracked**.
-- `income <= 50K` → candidate is treated as **“lower earning / lower-seniority profile”**, and thus **deprioritized**.
-
-### Protected attributes
-
-- **Primary:** `sex` (Male / Female)  
-- **Secondary (derived):** `race_binary` (White / Non-White)
-
-These attributes are:
-
-- **Not used as features** for model training.
-- Only used for:
-  - **Fairness analysis**, and
-  - **Post-processing** (group-specific threshold adjustments).
-
-### Processed files
-
-- `data/processed/adult/adult_clean.csv`  
-  Cleaned dataset after handling missing values and basic formatting.
-
-- `data/processed/adult/adult_model_ready.csv`  
-  Final dataset with engineered features and a `split` column (`train` / `test`).
-
-### Predictions
-
-Model predictions are saved under `data/predictions/` with filenames prefixed by the model name, e.g.:
-
-- `lr_preds.csv` for Logistic Regression  
-- `rf_preds.csv` for Random Forest  
-- `xgb_preds.csv` for XGBoost  
-
-> **Note:** Processed CSVs are included. To rebuild them from the raw Adult dataset, use `notebooks/1_Preprocessing.ipynb`.
-
----
-
-## Repository Structure
-
-```text
-fairness-awareness-ML/
-├── data/                   # Raw data, processed datasets, and saved predictions
-├── notebooks/              # Exploration, preprocessing, and experiment notebooks
-├── reports/                # Slide decks and project report exports
-├── src/
-│   ├── main.py             # Step 1: baseline training and fairness evaluation
-│   ├── main_step2.py       # Step 2: baseline + Equal Opportunity post-processing
-│   ├── metrics/            # Fairness metric implementations
-│   ├── models/             # Model training utilities (LR, RF, XGBoost)
-│   ├── preprocessing/      # Feature preprocessing pipeline
-│   ├── techniques/         # Fairness mitigation methods
-│   └── utils/              # Helper functions (e.g., saving predictions)
-├── requirements.txt        # Python dependencies
-└── README.md
-````
-
----
-
-## Setup
-
-1. **Python version**
-
-   * Recommended: **Python 3.10+**
-
-2. **Install dependencies**
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Check data availability**
-
-   * Verify that `data/processed/adult/adult_model_ready.csv` exists.
-   * If the processed data is missing or you want to regenerate it:
-
-     * Open and run `notebooks/1_Preprocessing.ipynb`.
-
----
-
-## Running Experiments
-
-### 1) Baseline models (Step 1)
-
-This stage trains Logistic Regression, Random Forest, and XGBoost using a shared preprocessing pipeline, and evaluates how they behave as candidate pre-screening models.
+### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/VillafuerTech/fairness-project.git
+cd fairness-project
+
+# Install the package
+pip install -e "."
+
+# For development
+pip install -e ".[dev]"
+
+# For API deployment
+pip install -e ".[api]"
+```
+
+### Run the Pipeline
+
+```bash
+# Set PYTHONPATH (required for legacy scripts)
+export PYTHONPATH=src:.
+
+# Run the unified pipeline (baseline + EO post-processing)
 python src/main.py
+
+# Or run with specific step
+python src/main.py --step 1        # Baseline only
+python src/main.py --step 2        # EO post-processing only
+python src/main.py --step all      # Both (default)
+
+# Run leakage-free evaluation (recommended)
+python src/main_leakage_free.py
 ```
 
-**What this script does:**
-
-* Loads `adult_model_ready.csv` and builds train/test splits based on the `split` column.
-* Applies preprocessing:
-
-  * Standard scaling for numeric features.
-  * One-hot encoding for categorical features.
-  * Sensitive attributes (`sex`, `race`, `race_binary`) are dropped from the feature matrix used for training.
-* Trains baseline models:
-
-  * Logistic Regression
-  * Random Forest
-  * XGBoost
-* Computes standard **performance metrics**:
-
-  * Accuracy, Precision, Recall, F1.
-* Computes **fairness metrics** for:
-
-  * `sex` (Male vs Female)
-  * `race_binary` (White vs Non-White)
-* Interprets the positive class `>50K` as **“fast-tracked candidate”** in the hiring pipeline.
-* Saves prediction files for each model in `data/predictions/`.
-
----
-
-### 2) Equal Opportunity post-processing (Step 2)
-
-This stage applies **post-processing** to explicitly target Equal Opportunity in the hiring scenario, focusing on the `sex` attribute.
+### CLI Commands
 
 ```bash
-python src/main_step2.py
+# Using the CLI (requires pip install -e .)
+PYTHONPATH=src python -m fairness_project.cli train --model xgb --seed 42
+PYTHONPATH=src python -m fairness_project.cli evaluate
+PYTHONPATH=src python -m fairness_project.cli mitigate eo --sensitive sex
+PYTHONPATH=src python -m fairness_project.cli plot
 ```
 
-**What this script does:**
+## Project Structure
 
-* Re-trains the same baseline models as in Step 1.
-* Calculates True Positive Rates (TPRs) for Male and Female groups, where:
+```
+fairness-project/
+├── pyproject.toml                 # Package configuration (PEP 621)
+├── configs/
+│   └── default.yaml               # Default configuration
+├── data/
+│   ├── raw/adult/                 # Raw UCI Adult data
+│   ├── processed/adult/           # Processed data
+│   ├── predictions/               # Model predictions
+│   ├── metrics/                   # Evaluation metrics
+│   └── plots/                     # Visualizations
+├── docs/
+│   ├── data.md                    # Data documentation
+│   ├── responsible_ai.md          # Responsible AI protocol
+│   └── model_card.md              # Model card
+├── src/
+│   ├── main.py                    # Unified pipeline (legacy)
+│   ├── main_leakage_free.py       # Leakage-free evaluation
+│   ├── preprocessing/             # Feature preprocessing
+│   ├── models/                    # Model training
+│   ├── metrics/                   # Fairness metrics
+│   ├── techniques/                # Mitigation techniques
+│   ├── plots/                     # Visualization
+│   └── fairness_project/          # Core package
+│       ├── cli.py                 # CLI interface
+│       ├── config.py              # Configuration system
+│       ├── data/                  # Data download/preprocess
+│       ├── features/              # Feature engineering
+│       ├── models/                # Model training & registry
+│       ├── metrics/               # Performance & fairness
+│       ├── fairness/              # Mitigation techniques
+│       ├── evaluation/            # Evaluation & reporting
+│       ├── inference/             # Batch & API inference
+│       └── monitoring/            # Drift detection
+├── tests/                         # Unit tests
+├── .github/workflows/ci.yml       # CI pipeline
+├── Dockerfile                     # API container
+└── docker-compose.yml             # Docker setup
+```
 
-  * True Positive = a genuinely high-earning (`>50K`) candidate correctly predicted as “fast-tracked”.
-* Identifies **TPR gaps** between the privileged group (e.g., Male) and the unprivileged group (e.g., Female).
-* For the unprivileged group, **lowers the decision threshold** for predicting `>50K` until the TPR moves closer to that of the privileged group.
-* Recomputes performance and fairness metrics **before and after** applying this post-processing.
-* Allows analysis of the trade-off between:
+## Evaluation Protocol
 
-  * Not “giving up” too much overall accuracy, and
-  * Avoiding systematic under-selection of women in the pre-screening stage.
+### Leakage-Free EO Tuning
 
----
+The Equal Opportunity post-processing requires threshold tuning. To prevent test set leakage:
 
-### 3) Notebooks
+1. **Split data**: Train / Validation (15%) / Test
+2. **Train model**: On training set only
+3. **Tune thresholds**: On validation set only
+4. **Evaluate**: On test set (thresholds applied without using test labels)
 
-Interactive notebooks for exploration and custom experiments:
+```python
+# Example using leakage-free protocol
+from fairness_project.evaluation.leakage_free import LeakageFreeEvaluator
 
-1. `notebooks/1_Preprocessing.ipynb`
-   Data cleaning, handling missing values, and creating train/test splits.
-
-2. `notebooks/2_metrics_and_models.ipynb`
-   Implementation of fairness metrics and baseline experiments.
-
-3. `notebooks/3_Train_XGBoost.ipynb`
-   Additional tuning and analysis of XGBoost.
-
-4. `notebooks/4_EDA_adult_income.ipynb`
-   Exploratory data analysis focusing on income distribution and group differences.
-
----
+evaluator = LeakageFreeEvaluator(sensitive_col="sex")
+evaluator.tune_thresholds_on_validation(y_val, y_proba_val, sensitive_val)
+y_pred_test = evaluator.apply_to_test(y_proba_test, sensitive_test)
+```
 
 ## Fairness Metrics
 
-Implemented in `src/metrics/fairness.py`:
+| Metric | Description | Ideal Value |
+|--------|-------------|-------------|
+| SPD | Statistical Parity Difference | 0 |
+| DI | Disparate Impact | 1 |
+| TPR Gap | True Positive Rate Gap | 0 |
 
-* **Demographic Parity (DP)**
+## Results
 
-  * Measures the **rate of positive predictions** (fast-tracked candidates) in each group.
-  * In this project, “positive” = predicted `>50K` = **fast-tracked for interview**.
+### Before EO Post-Processing
 
-* **Statistical Parity Difference (SPD)**
+| Model | Accuracy | SPD | DI | TPR Gap |
+|-------|----------|-----|-----|---------|
+| LR | 0.847 | 0.175 | 0.321 | 0.070 |
+| RF | 0.845 | 0.181 | 0.339 | 0.066 |
+| XGB | 0.862 | 0.170 | 0.345 | 0.065 |
 
-  * Difference in positive prediction rates between privileged and unprivileged groups.
-  * Ideal value: **0** (both groups are fast-tracked at the same rate).
+### After EO Post-Processing (Leakage-Free)
 
-* **Disparate Impact (DI)**
+| Model | Accuracy | SPD | DI | TPR Gap |
+|-------|----------|-----|-----|---------|
+| LR | 0.846 | 0.150 | 0.417 | -0.020 |
+| RF | 0.843 | 0.152 | 0.441 | -0.038 |
+| XGB | 0.859 | 0.158 | 0.455 | -0.015 |
 
-  * Ratio of positive prediction rates: (unprivileged group) / (privileged group).
-  * Values close to **1** indicate similar odds of being fast-tracked.
+## API Deployment
 
-### Equal Opportunity post-processing
+### Using Docker
 
-Implemented in `src/techniques/equal_opportunity.py`:
+```bash
+# Build and run
+docker build -t fairness-api .
+docker run -p 8000:8000 -v ./models:/app/models fairness-api
 
-* Targets **Equal Opportunity**, which in this context means that:
+# Or with docker-compose
+docker-compose up
+```
 
-  * Among candidates who truly belong to the high-income group (`>50K`),
-  * Women and men should have **similar chances** of being predicted as “fast-tracked”.
-* This is enforced (approximately) by:
+### API Endpoints
 
-  * Adjusting the decision threshold *per group* after training,
-  * Without retraining or changing model parameters.
+```bash
+# Health check
+curl http://localhost:8000/health
 
----
+# Single prediction
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "age": 35,
+    "workclass": "Private",
+    "fnlwgt": 200000,
+    "education": "Bachelors",
+    "education_num": 13,
+    "marital_status": "Married-civ-spouse",
+    "occupation": "Exec-managerial",
+    "relationship": "Husband",
+    "native_country": "United-States",
+    "capital_gain": 5000,
+    "capital_loss": 0,
+    "hours_per_week": 40
+  }'
+```
 
-## Reproducibility Notes
+## Configuration
 
-* Random seeds are **not centrally fixed**, so metric values can differ slightly across runs.
-* Preprocessing:
+Configuration is managed via YAML files:
 
-  * Uses `StandardScaler` for numeric features.
-  * Uses one-hot encoding for categorical variables.
-  * Drops sensitive attributes from the features supplied to the models.
-* Sensitive attributes (`sex`, `race_binary`) are:
+```yaml
+# configs/default.yaml
+seed: 42
+model:
+  model_type: xgb
+  xgb_n_estimators: 300
+fairness:
+  sensitive_attributes: [sex, race_binary]
+  eo_base_threshold: 0.5
+```
 
-  * Kept in the dataset for **evaluation and analysis**.
-  * Used only for computing group metrics and for group-specific post-processing (threshold adjustments).
+## Testing
 
----
+```bash
+# Run tests (requires pytest)
+pip install pytest
+PYTHONPATH=src pytest tests/ -v
+```
 
+## Documentation
+
+- [Data Documentation](docs/data.md) - Dataset details and licensing
+- [Responsible AI Protocol](docs/responsible_ai.md) - Fairness guidelines
+- [Model Card](docs/model_card.md) - Model specifications
+
+## License
+
+MIT License
+
+## Citation
+
+If using this project, please cite:
+
+```bibtex
+@misc{fairness-project,
+  title={Fairness-Aware Candidate Pre-Screening},
+  author={VillafuerTech},
+  year={2024},
+  url={https://github.com/VillafuerTech/fairness-project}
+}
+```
+
+## Acknowledgments
+
+- UCI Machine Learning Repository for the Adult dataset
+- Trustworthy Machine Learning course project
