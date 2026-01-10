@@ -1,19 +1,15 @@
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-import matplotlib.pyplot as plt
-from pathlib import Path
 
 sns.set(style="whitegrid")
 
+
 def plot_metric(df, metric, ylabel, save_path):
     plt.figure(figsize=(8, 5))
-    ax = sns.barplot(
-        data=df,
-        x="Model",
-        y=metric,
-        hue="Condition",
-        palette="Set2"
-    )
+    ax = sns.barplot(data=df, x="Model", y=metric, hue="Condition", palette="Set2")
 
     plt.title(f"{metric}: Before vs After Equal Opportunity")
     plt.ylabel(ylabel)
@@ -28,6 +24,7 @@ def plot_metric(df, metric, ylabel, save_path):
     plt.close()
     print(f"Saved plot → {save_path}")
 
+
 def main():
     metrics_path = Path("data/metrics/step2_metrics.csv")
     df = pd.read_csv(metrics_path)
@@ -40,7 +37,7 @@ def main():
         df=df,
         metric="Accuracy",
         ylabel="Accuracy",
-        save_path=output_dir / "accuracy_before_after_eo.png"
+        save_path=output_dir / "accuracy_before_after_eo.png",
     )
 
     # 2. Statistical Parity Difference (SPD)
@@ -48,7 +45,7 @@ def main():
         df=df,
         metric="SPD",
         ylabel="SPD (Male - Female)",
-        save_path=output_dir / "spd_before_after_eo.png"
+        save_path=output_dir / "spd_before_after_eo.png",
     )
 
     # 3. Disparate Impact (DI)
@@ -56,7 +53,7 @@ def main():
         df=df,
         metric="DI",
         ylabel="DI (Female / Male)",
-        save_path=output_dir / "di_before_after_eo.png"
+        save_path=output_dir / "di_before_after_eo.png",
     )
 
     # 4. TPR Gap
@@ -64,7 +61,7 @@ def main():
         df=df,
         metric="TPR_gap",
         ylabel="TPR Gap (Male - Female)",
-        save_path=output_dir / "tprgap_before_after_eo.png"
+        save_path=output_dir / "tprgap_before_after_eo.png",
     )
 
     print("\nAll plots generated successfully.")

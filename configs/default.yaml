@@ -1,0 +1,57 @@
+# Fairness Project Configuration
+# ================================
+# Default configuration for fairness-aware candidate pre-screening
+
+# Global settings
+seed: 42
+verbose: true
+n_jobs: -1
+
+# Data configuration
+data:
+  raw_data_dir: data/raw/adult
+  processed_data_dir: data/processed/adult
+  model_ready_path: data/processed/adult/adult_model_ready.csv
+  test_size: 0.2
+  val_size: 0.15  # For leakage-free EO threshold tuning
+
+# Model configuration
+model:
+  model_type: xgb  # Options: lr, rf, xgb
+  random_state: 42
+
+  # Logistic Regression
+  lr_max_iter: 500
+
+  # Random Forest
+  rf_n_estimators: 300
+  rf_max_depth: null
+
+  # XGBoost
+  xgb_n_estimators: 300
+  xgb_max_depth: 4
+  xgb_learning_rate: 0.1
+  xgb_subsample: 0.8
+  xgb_colsample_bytree: 0.8
+
+# Fairness configuration
+fairness:
+  sensitive_attributes:
+    - sex
+    - race_binary
+  privileged_groups:
+    sex: Male
+    race_binary: White
+
+  # Equal Opportunity settings
+  eo_base_threshold: 0.5
+  eo_n_thresholds: 101
+  eo_search_range: [0.0, 0.5]
+
+# Output paths
+output:
+  predictions_dir: data/predictions
+  metrics_dir: data/metrics
+  plots_dir: data/plots
+  runs_dir: runs
+  models_dir: models

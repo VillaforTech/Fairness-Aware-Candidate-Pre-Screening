@@ -98,8 +98,22 @@ data/interim/
 data/external/
 
 # -----------------------------
+# Runs / Experiments
+# -----------------------------
+runs/
+!runs/.gitkeep
+
+# -----------------------------
 # OS-specific
 # -----------------------------
 Thumbs.db
 Desktop.ini
 
+# -----------------------------
+# Project specific
+# -----------------------------
+*.csv
+!data/raw/**/*.csv
+data/predictions/
+data/metrics/
+data/plots/
