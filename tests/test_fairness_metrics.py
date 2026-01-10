@@ -1,7 +1,6 @@
 """Tests for fairness metrics."""
 
 import numpy as np
-import pytest
 
 
 class TestDemographicParity:

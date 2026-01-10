@@ -45,11 +45,13 @@ def save_predictions(
     else:
         y_true_vals = y_true
 
-    df_out = pd.DataFrame({
-        "index": index,
-        "y_true": y_true_vals,
-        "y_pred": y_pred,
-    })
+    df_out = pd.DataFrame(
+        {
+            "index": index,
+            "y_true": y_true_vals,
+            "y_pred": y_pred,
+        }
+    )
 
     file_path = out / f"{model_name}_preds.csv"
     df_out.to_csv(file_path, index=False)

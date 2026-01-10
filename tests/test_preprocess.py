@@ -1,8 +1,6 @@
 """Tests for preprocessing pipeline."""
 
 import numpy as np
-import pandas as pd
-import pytest
 
 
 class TestBuildPreprocessingPipeline:
@@ -11,7 +9,6 @@ class TestBuildPreprocessingPipeline:
     def test_returns_transformer(self, sample_adult_data):
         """Test that function returns a ColumnTransformer."""
         from sklearn.compose import ColumnTransformer
-
         from src.preprocessing.preprocess import build_preprocessing_pipeline
 
         preprocess, num_cols, cat_cols = build_preprocessing_pipeline(sample_adult_data)

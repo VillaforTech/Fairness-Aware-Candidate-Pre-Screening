@@ -10,7 +10,7 @@ def compute_tpr(y_true, y_pred):
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
 
-    mask_pos = (y_true == 1)
+    mask_pos = y_true == 1
     if mask_pos.sum() == 0:
         return 0.0
 
@@ -41,8 +41,8 @@ def equal_opportunity_postprocessing(y_true, y_pred_proba, sensitive_attr):
     y_pred_proba = np.asarray(y_pred_proba)
     sensitive_attr = np.asarray(sensitive_attr)
 
-    priv_mask = (sensitive_attr == "Male")
-    unpriv_mask = (sensitive_attr == "Female")
+    priv_mask = sensitive_attr == "Male"
+    unpriv_mask = sensitive_attr == "Female"
 
     # Sanity checks
     if priv_mask.sum() == 0 or unpriv_mask.sum() == 0:

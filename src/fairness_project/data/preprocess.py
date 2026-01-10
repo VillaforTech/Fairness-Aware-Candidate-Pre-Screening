@@ -106,9 +106,7 @@ def create_binary_race(df: pd.DataFrame) -> pd.DataFrame:
         Dataframe with added 'race_binary' column.
     """
     df = df.copy()
-    df["race_binary"] = df["race"].apply(
-        lambda x: "White" if x == "White" else "Non-White"
-    )
+    df["race_binary"] = df["race"].apply(lambda x: "White" if x == "White" else "Non-White")
     return df
 
 
@@ -177,9 +175,9 @@ def prepare_model_ready_data(
         print(f"Total samples: {len(df)}")
         print(f"Train samples: {(df['split'] == 'train').sum()}")
         print(f"Test samples: {(df['split'] == 'test').sum()}")
-        print(f"\nIncome distribution:")
+        print("\nIncome distribution:")
         print(df["income"].value_counts(normalize=True))
-        print(f"\nSex distribution:")
+        print("\nSex distribution:")
         print(df["sex"].value_counts(normalize=True))
 
     return df
@@ -242,12 +240,14 @@ def main() -> None:
         help="Path to test data",
     )
     parser.add_argument(
-        "--output-path", "-o",
+        "--output-path",
+        "-o",
         default="data/processed/adult/adult_model_ready.csv",
         help="Output path for processed data",
     )
     parser.add_argument(
-        "--quiet", "-q",
+        "--quiet",
+        "-q",
         action="store_true",
         help="Suppress output",
     )

@@ -70,7 +70,7 @@ def download_file(url: str, dest_path: Path, verbose: bool = True) -> Path:
             print(f"Saved to {dest_path}")
         return dest_path
     except Exception as e:
-        raise RuntimeError(f"Failed to download {url}: {e}")
+        raise RuntimeError(f"Failed to download {url}: {e}") from e
 
 
 def download_adult_dataset(
@@ -137,12 +137,14 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Download Adult dataset")
     parser.add_argument(
-        "--output-dir", "-o",
+        "--output-dir",
+        "-o",
         default="data/raw/adult",
         help="Output directory",
     )
     parser.add_argument(
-        "--quiet", "-q",
+        "--quiet",
+        "-q",
         action="store_true",
         help="Suppress output",
     )

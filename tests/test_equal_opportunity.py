@@ -82,14 +82,15 @@ class TestEqualOpportunityPostprocessing:
         from src.techniques.equal_opportunity import equal_opportunity_postprocessing
 
         np.random.seed(42)
-        n = 100
 
         # Equal TPR for both groups
         y_true = np.concatenate([np.ones(50), np.ones(50)])
-        y_proba = np.concatenate([
-            np.random.uniform(0.6, 0.9, 50),
-            np.random.uniform(0.6, 0.9, 50),
-        ])
+        y_proba = np.concatenate(
+            [
+                np.random.uniform(0.6, 0.9, 50),
+                np.random.uniform(0.6, 0.9, 50),
+            ]
+        )
         sensitive = np.array(["Male"] * 50 + ["Female"] * 50)
 
         y_pred_eo, info = equal_opportunity_postprocessing(

@@ -8,9 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
 import pandas as pd
-
 
 # Expected schema for model-ready data
 EXPECTED_COLUMNS = {
@@ -242,9 +240,18 @@ def validate_inference_input(
     if required_columns is None:
         # Feature columns (exclude target, split, sensitive)
         required_columns = [
-            "age", "workclass", "fnlwgt", "education", "education_num",
-            "marital_status", "occupation", "relationship", "native_country",
-            "capital_gain", "capital_loss", "hours_per_week",
+            "age",
+            "workclass",
+            "fnlwgt",
+            "education",
+            "education_num",
+            "marital_status",
+            "occupation",
+            "relationship",
+            "native_country",
+            "capital_gain",
+            "capital_loss",
+            "hours_per_week",
         ]
 
     errors = []

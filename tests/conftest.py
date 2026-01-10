@@ -46,25 +46,17 @@ def sample_adult_data():
         "capital_gain": np.random.randint(0, 100000, n_samples),
         "capital_loss": np.random.randint(0, 5000, n_samples),
         "hours_per_week": np.random.randint(10, 80, n_samples),
-        "workclass": np.random.choice(
-            ["Private", "Self-emp", "Gov", "Other"], n_samples
-        ),
+        "workclass": np.random.choice(["Private", "Self-emp", "Gov", "Other"], n_samples),
         "education": np.random.choice(
             ["HS-grad", "Bachelors", "Masters", "Doctorate", "Some-college"],
             n_samples,
         ),
-        "marital_status": np.random.choice(
-            ["Married", "Never-married", "Divorced"], n_samples
-        ),
-        "occupation": np.random.choice(
-            ["Tech", "Sales", "Admin", "Exec", "Other"], n_samples
-        ),
+        "marital_status": np.random.choice(["Married", "Never-married", "Divorced"], n_samples),
+        "occupation": np.random.choice(["Tech", "Sales", "Admin", "Exec", "Other"], n_samples),
         "relationship": np.random.choice(
             ["Husband", "Wife", "Own-child", "Not-in-family"], n_samples
         ),
-        "native_country": np.random.choice(
-            ["United-States", "Mexico", "Other"], n_samples
-        ),
+        "native_country": np.random.choice(["United-States", "Mexico", "Other"], n_samples),
         "sex": np.random.choice(["Male", "Female"], n_samples),
         "race": np.random.choice(["White", "Black", "Asian", "Other"], n_samples),
         "income": np.random.choice([">50K", "<=50K"], n_samples),
@@ -80,15 +72,16 @@ def sample_adult_data():
 def biased_predictions():
     """Generate predictions with clear fairness disparity for testing."""
     np.random.seed(42)
-    n_samples = 1000
 
     sensitive = np.array(["Male"] * 500 + ["Female"] * 500)
 
     # True labels - equal base rates
-    y_true = np.concatenate([
-        np.random.randint(0, 2, 500),
-        np.random.randint(0, 2, 500),
-    ])
+    y_true = np.concatenate(
+        [
+            np.random.randint(0, 2, 500),
+            np.random.randint(0, 2, 500),
+        ]
+    )
 
     # Biased predictions - higher positive rate for males
     y_pred_male = np.where(np.random.rand(500) > 0.3, 1, 0)  # 70% positive
@@ -96,10 +89,12 @@ def biased_predictions():
     y_pred = np.concatenate([y_pred_male, y_pred_female])
 
     # Probabilities with similar bias
-    y_proba = np.concatenate([
-        np.clip(0.6 + np.random.randn(500) * 0.2, 0, 1),
-        np.clip(0.4 + np.random.randn(500) * 0.2, 0, 1),
-    ])
+    y_proba = np.concatenate(
+        [
+            np.clip(0.6 + np.random.randn(500) * 0.2, 0, 1),
+            np.clip(0.4 + np.random.randn(500) * 0.2, 0, 1),
+        ]
+    )
 
     return {
         "y_true": y_true,

@@ -191,7 +191,7 @@ def compute_fairness_drift(
         "spd_drift": spd_cur - spd_ref,
         "di_reference": di_ref,
         "di_current": di_cur,
-        "di_drift": di_cur - di_ref if di_ref is not None and di_cur is not None else None,
+        "di_drift": (di_cur - di_ref if di_ref is not None and di_cur is not None else None),
     }
 
 
@@ -265,7 +265,7 @@ def generate_drift_report(
     report["summary"] = {
         "total_features_checked": total_features,
         "features_with_drift": n_drifted,
-        "drift_percentage": n_drifted / total_features * 100 if total_features > 0 else 0,
+        "drift_percentage": (n_drifted / total_features * 100 if total_features > 0 else 0),
     }
 
     # Save if path provided

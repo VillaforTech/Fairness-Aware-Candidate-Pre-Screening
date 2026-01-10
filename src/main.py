@@ -18,18 +18,18 @@ import argparse
 from pathlib import Path
 
 import pandas as pd
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-
-from src.preprocessing.preprocess import build_preprocessing_pipeline
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from src.metrics.fairness import compute_fairness_metrics
 from src.models.train_lr import train_lr
 from src.models.train_rf import train_rf
-from src.metrics.fairness import compute_fairness_metrics
-from src.utils.utils import save_predictions
+from src.preprocessing.preprocess import build_preprocessing_pipeline
 from src.techniques.equal_opportunity import equal_opportunity_postprocessing
+from src.utils.utils import save_predictions
 
 # XGBoost is optional
 try:
     from src.models.train_xgb import train_xgb
+
     HAS_XGBOOST = True
 except ImportError:
     HAS_XGBOOST = False
@@ -48,6 +48,7 @@ all_metrics = []
 # HELPERS
 # =====================================================================
 
+
 def record_metrics(model_name, condition, y_true, y_pred, df_test, tpr_gap=None):
     """Record metrics for later comparison."""
     fair = compute_fairness_metrics(
@@ -56,14 +57,16 @@ def record_metrics(model_name, condition, y_true, y_pred, df_test, tpr_gap=None)
         sensitive=df_test["sex"],
         privileged_group="Male",
     )
-    all_metrics.append({
-        "Model": model_name,
-        "Condition": condition,
-        "Accuracy": accuracy_score(y_true, y_pred),
-        "SPD": fair["SPD"],
-        "DI": fair["DI"],
-        "TPR_gap": tpr_gap
-    })
+    all_metrics.append(
+        {
+            "Model": model_name,
+            "Condition": condition,
+            "Accuracy": accuracy_score(y_true, y_pred),
+            "SPD": fair["SPD"],
+            "DI": fair["DI"],
+            "TPR_gap": tpr_gap,
+        }
+    )
 
 
 def print_performance(model_name, y_true, y_pred):
@@ -98,10 +101,10 @@ def print_fairness(model_name, y_true, y_pred, df_test):
 
 def compute_tpr_by_sex(y_true, y_pred, df_test):
     """Compute TPR for each sex group."""
-    y_true_arr = y_true.to_numpy() if hasattr(y_true, 'to_numpy') else y_true
+    y_true_arr = y_true.to_numpy() if hasattr(y_true, "to_numpy") else y_true
 
     def tpr(actual, pred):
-        mask = (actual == 1)
+        mask = actual == 1
         if mask.sum() == 0:
             return 0.0
         return (pred[mask] == 1).mean()
@@ -128,6 +131,7 @@ def print_tpr(label, tpr_male, tpr_female, gap):
 # LOAD DATA
 # =====================================================================
 
+
 def load_data(data_path="data/processed/adult/adult_model_ready.csv"):
     """Load and prepare the dataset."""
     df = pd.read_csv(data_path)
@@ -150,27 +154,29 @@ def load_data(data_path="data/processed/adult/adult_model_ready.csv"):
 # STEP 1: BASELINE TRAINING
 # =====================================================================
 
+
 def run_step1(X_train, X_test, y_train, y_test, df_test, preprocess, save_prefix=""):
     """
     Step 1: Train baseline models and evaluate performance + fairness.
 
     Returns trained models and their predictions/probabilities.
     """
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print(" STEP 1: BASELINE MODEL TRAINING & EVALUATION ")
-    print("="*70)
+    print("=" * 70)
 
     # Raw fairness (before any model)
     print("\n FAIRNESS BEFORE MODEL TRAINING (RAW LABELS) ")
     raw_fair_sex = compute_fairness_metrics(
-        y_true=y_test, y_pred=y_test,
-        sensitive=df_test["sex"], privileged_group="Male"
+        y_true=y_test, y_pred=y_test, sensitive=df_test["sex"], privileged_group="Male"
     )
     print("Raw Fairness (SEX):", raw_fair_sex)
 
     raw_fair_race = compute_fairness_metrics(
-        y_true=y_test, y_pred=y_test,
-        sensitive=df_test["race_binary"], privileged_group="White"
+        y_true=y_test,
+        y_pred=y_test,
+        sensitive=df_test["race_binary"],
+        privileged_group="White",
     )
     print("Raw Fairness (RACE):", raw_fair_race)
 
@@ -243,6 +249,7 @@ def run_step1(X_train, X_test, y_train, y_test, df_test, preprocess, save_prefix
 # STEP 2: EQUAL OPPORTUNITY POST-PROCESSING
 # =====================================================================
 
+
 def run_step2(probabilities, y_test, df_test, X_test, save_prefix=""):
     """
     Step 2: Apply Equal Opportunity post-processing to all models.
@@ -251,16 +258,16 @@ def run_step2(probabilities, y_test, df_test, X_test, save_prefix=""):
     leakage issue. A future update will implement proper train/val/test
     split for threshold tuning on validation data only.
     """
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print(" STEP 2: EQUAL OPPORTUNITY POST-PROCESSING ")
-    print("="*70)
+    print("=" * 70)
 
     eo_predictions = {}
     model_names = {"lr": "LR", "rf": "RF", "xgb": "XGB"}
     display_names = {
         "lr": "Logistic Regression",
         "rf": "Random Forest",
-        "xgb": "XGBoost"
+        "xgb": "XGBoost",
     }
 
     for key, y_proba in probabilities.items():
@@ -295,6 +302,7 @@ def run_step2(probabilities, y_test, df_test, X_test, save_prefix=""):
 # SAVE METRICS & GENERATE PLOTS
 # =====================================================================
 
+
 def save_all_metrics(output_path="data/metrics/step2_metrics.csv"):
     """Save all collected metrics to CSV."""
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
@@ -306,11 +314,11 @@ def save_all_metrics(output_path="data/metrics/step2_metrics.csv"):
     return metrics_df
 
 
-def generate_plots(metrics_path="data/metrics/step2_metrics.csv",
-                   output_dir="data/plots/step2"):
+def generate_plots(metrics_path="data/metrics/step2_metrics.csv", output_dir="data/plots/step2"):
     """Generate comparison plots."""
     try:
         from src.plots.plot_step2 import main as plot_main
+
         plot_main()
     except ImportError:
         print("\nPlot module not available. Skipping plot generation.")
@@ -320,8 +328,12 @@ def generate_plots(metrics_path="data/metrics/step2_metrics.csv",
 # MAIN
 # =====================================================================
 
-def main(step="all", data_path="data/processed/adult/adult_model_ready.csv",
-         generate_plots_flag=True):
+
+def main(
+    step="all",
+    data_path="data/processed/adult/adult_model_ready.csv",
+    generate_plots_flag=True,
+):
     """
     Run the fairness pipeline.
 
@@ -359,7 +371,7 @@ def main(step="all", data_path="data/processed/adult/adult_model_ready.csv",
                 X_train, X_test, y_train, y_test, df_test, preprocess
             )
 
-        eo_predictions = run_step2(probabilities, y_test, df_test, X_test)
+        run_step2(probabilities, y_test, df_test, X_test)
 
         # Save metrics
         save_all_metrics()
@@ -368,9 +380,9 @@ def main(step="all", data_path="data/processed/adult/adult_model_ready.csv",
         if generate_plots_flag:
             generate_plots()
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print(" PIPELINE COMPLETED ")
-    print("="*70)
+    print("=" * 70)
 
     return models
 
@@ -384,25 +396,17 @@ def parse_args():
         "--step",
         choices=["1", "2", "all"],
         default="all",
-        help="Which step to run: 1 (baseline), 2 (EO), or all (default: all)"
+        help="Which step to run: 1 (baseline), 2 (EO), or all (default: all)",
     )
     parser.add_argument(
         "--data-path",
         default="data/processed/adult/adult_model_ready.csv",
-        help="Path to the processed data file"
+        help="Path to the processed data file",
     )
-    parser.add_argument(
-        "--no-plots",
-        action="store_true",
-        help="Skip plot generation"
-    )
+    parser.add_argument("--no-plots", action="store_true", help="Skip plot generation")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    main(
-        step=args.step,
-        data_path=args.data_path,
-        generate_plots_flag=not args.no_plots
-    )
+    main(step=args.step, data_path=args.data_path, generate_plots_flag=not args.no_plots)

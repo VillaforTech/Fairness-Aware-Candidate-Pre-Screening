@@ -169,9 +169,7 @@ class LeakageFreeEvaluator:
             If thresholds haven't been tuned yet.
         """
         if self.threshold_priv is None or self.threshold_unpriv is None:
-            raise RuntimeError(
-                "Thresholds not tuned. Call tune_thresholds_on_validation first."
-            )
+            raise RuntimeError("Thresholds not tuned. Call tune_thresholds_on_validation first.")
 
         from fairness_project.fairness.postprocess import apply_thresholds
 
@@ -209,7 +207,12 @@ class LeakageFreeEvaluator:
         dict[str, Any]
             Evaluation metrics.
         """
-        from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+        from sklearn.metrics import (
+            accuracy_score,
+            f1_score,
+            precision_score,
+            recall_score,
+        )
 
         from fairness_project.metrics.fairness import (
             compute_fairness_metrics,

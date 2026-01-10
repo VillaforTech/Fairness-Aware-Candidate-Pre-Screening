@@ -44,22 +44,24 @@ if HAS_FASTAPI:
         capital_loss: int = Field(..., ge=0, description="Capital losses")
         hours_per_week: int = Field(..., ge=0, le=168, description="Hours worked per week")
 
-        model_config = {"json_schema_extra": {
-            "example": {
-                "age": 35,
-                "workclass": "Private",
-                "fnlwgt": 200000,
-                "education": "Bachelors",
-                "education_num": 13,
-                "marital_status": "Married-civ-spouse",
-                "occupation": "Exec-managerial",
-                "relationship": "Husband",
-                "native_country": "United-States",
-                "capital_gain": 5000,
-                "capital_loss": 0,
-                "hours_per_week": 40,
+        model_config = {
+            "json_schema_extra": {
+                "example": {
+                    "age": 35,
+                    "workclass": "Private",
+                    "fnlwgt": 200000,
+                    "education": "Bachelors",
+                    "education_num": 13,
+                    "marital_status": "Married-civ-spouse",
+                    "occupation": "Exec-managerial",
+                    "relationship": "Husband",
+                    "native_country": "United-States",
+                    "capital_gain": 5000,
+                    "capital_loss": 0,
+                    "hours_per_week": 40,
+                }
             }
-        }}
+        }
 
     class PredictionOutput(BaseModel):
         """Output schema for prediction."""
@@ -176,7 +178,7 @@ if HAS_FASTAPI:
                 probability=float(prob),
                 label=">50K" if pred == 1 else "<=50K",
             )
-            for pred, prob in zip(predictions, probabilities)
+            for pred, prob in zip(predictions, probabilities, strict=False)
         ]
 
         return BatchPredictionOutput(predictions=results)

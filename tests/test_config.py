@@ -3,8 +3,6 @@
 import tempfile
 from pathlib import Path
 
-import pytest
-
 
 class TestConfig:
     """Tests for Config class."""
@@ -38,7 +36,6 @@ class TestSeedManagement:
     def test_set_seed(self):
         """Test that set_seed changes numpy random state."""
         import numpy as np
-
         from src.fairness_project.config import set_seed
 
         set_seed(42)

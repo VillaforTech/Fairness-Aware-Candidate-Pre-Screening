@@ -20,22 +20,22 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-
-from src.preprocessing.preprocess import build_preprocessing_pipeline
-from src.models.train_lr import train_lr
-from src.models.train_rf import train_rf
-from src.metrics.fairness import compute_fairness_metrics
-from src.utils.utils import save_predictions
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from src.fairness_project.fairness.postprocess import (
-    tune_equal_opportunity,
     apply_thresholds,
     compute_tpr,
+    tune_equal_opportunity,
 )
+from src.metrics.fairness import compute_fairness_metrics
+from src.models.train_lr import train_lr
+from src.models.train_rf import train_rf
+from src.preprocessing.preprocess import build_preprocessing_pipeline
+from src.utils.utils import save_predictions
 
 # XGBoost is optional
 try:
     from src.models.train_xgb import train_xgb
+
     HAS_XGBOOST = True
 except ImportError:
     HAS_XGBOOST = False
@@ -57,19 +57,22 @@ def record_metrics(model_name, condition, y_true, y_pred, sensitive, tpr_gap=Non
         sensitive=sensitive,
         privileged_group="Male",
     )
-    all_metrics.append({
-        "Model": model_name,
-        "Condition": condition,
-        "Accuracy": accuracy_score(y_true, y_pred),
-        "SPD": fair["SPD"],
-        "DI": fair["DI"],
-        "TPR_gap": tpr_gap
-    })
+    all_metrics.append(
+        {
+            "Model": model_name,
+            "Condition": condition,
+            "Accuracy": accuracy_score(y_true, y_pred),
+            "SPD": fair["SPD"],
+            "DI": fair["DI"],
+            "TPR_gap": tpr_gap,
+        }
+    )
 
 
 # =====================================================================
 # DATA LOADING
 # =====================================================================
+
 
 def load_and_split_data(data_path, val_ratio=0.15, random_state=42):
     """
@@ -111,14 +114,13 @@ def load_and_split_data(data_path, val_ratio=0.15, random_state=42):
     X_val = df_val.drop(columns=drop_cols)
     X_test = df_test.drop(columns=drop_cols)
 
-    return (df_train, df_val, df_test,
-            X_train, X_val, X_test,
-            y_train, y_val, y_test)
+    return (df_train, df_val, df_test, X_train, X_val, X_test, y_train, y_val, y_test)
 
 
 # =====================================================================
 # HELPER FUNCTIONS
 # =====================================================================
+
 
 def compute_tpr_gap(y_true, y_pred, sensitive):
     """Compute TPR gap between Male and Female."""
@@ -159,6 +161,7 @@ def print_metrics(label, y_true, y_pred, sensitive):
 # MAIN PIPELINE
 # =====================================================================
 
+
 def run_leakage_free_pipeline(data_path, val_ratio=0.15, seed=42):
     """
     Run the complete leakage-free fairness pipeline.
@@ -173,16 +176,16 @@ def run_leakage_free_pipeline(data_path, val_ratio=0.15, seed=42):
     global all_metrics
     all_metrics = []
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print(" LEAKAGE-FREE FAIRNESS PIPELINE ")
-    print("="*70)
+    print("=" * 70)
     print("\nThis pipeline ensures EO thresholds are tuned on validation data,")
     print("NOT on test data, to prevent information leakage.\n")
 
     # Load and split data
-    (df_train, df_val, df_test,
-     X_train, X_val, X_test,
-     y_train, y_val, y_test) = load_and_split_data(data_path, val_ratio, seed)
+    (df_train, df_val, df_test, X_train, X_val, X_test, y_train, y_val, y_test) = (
+        load_and_split_data(data_path, val_ratio, seed)
+    )
 
     # Build preprocessing pipeline
     preprocess, _, _ = build_preprocessing_pipeline(df_train)
@@ -199,9 +202,9 @@ def run_leakage_free_pipeline(data_path, val_ratio=0.15, seed=42):
         model_configs.append(("xgb", "XGBoost", train_xgb))
 
     for key, name, train_fn in model_configs:
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print(f" {name.upper()} ")
-        print("="*70)
+        print("=" * 70)
 
         # Train model
         print(f"\nTraining {name}...")
@@ -209,8 +212,6 @@ def run_leakage_free_pipeline(data_path, val_ratio=0.15, seed=42):
         models[key] = model
 
         # Get predictions and probabilities
-        y_pred_val = model.predict(X_val)
-        y_pred_test = model.predict(X_test)
         y_proba_val = model.predict_proba(X_val)[:, 1]
         y_proba_test = model.predict_proba(X_test)[:, 1]
 
@@ -221,8 +222,7 @@ def run_leakage_free_pipeline(data_path, val_ratio=0.15, seed=42):
         y_pred_base_test = (y_proba_test >= 0.5).astype(int)
 
         gap_base = print_metrics(
-            f"{name} BASELINE (Test Set)",
-            y_test, y_pred_base_test, sensitive_test
+            f"{name} BASELINE (Test Set)", y_test, y_pred_base_test, sensitive_test
         )
         record_metrics(key.upper(), "Before EO", y_test, y_pred_base_test, sensitive_test, gap_base)
 
@@ -240,7 +240,7 @@ def run_leakage_free_pipeline(data_path, val_ratio=0.15, seed=42):
             sensitive_val=sensitive_val,
         )
 
-        print(f"Learned thresholds from VALIDATION:")
+        print("Learned thresholds from VALIDATION:")
         print(f"  Threshold (Male)  : {eo_params['threshold_priv']:.3f}")
         print(f"  Threshold (Female): {eo_params['threshold_unpriv']:.3f}")
         print(f"  Val TPR Male      : {eo_params['tpr_priv_val']:.4f}")
@@ -261,8 +261,7 @@ def run_leakage_free_pipeline(data_path, val_ratio=0.15, seed=42):
         )
 
         gap_eo = print_metrics(
-            f"{name} EO-ADJUSTED (Test Set)",
-            y_test, y_pred_eo_test, sensitive_test
+            f"{name} EO-ADJUSTED (Test Set)", y_test, y_pred_eo_test, sensitive_test
         )
         record_metrics(key.upper(), "After EO", y_test, y_pred_eo_test, sensitive_test, gap_eo)
 
@@ -280,16 +279,17 @@ def run_leakage_free_pipeline(data_path, val_ratio=0.15, seed=42):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     metrics_df.to_csv(output_path, index=False)
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print(" RESULTS SUMMARY (Leakage-Free Protocol) ")
-    print("="*70)
+    print("=" * 70)
     print(f"\nMetrics saved to: {output_path}")
     print("\n" + metrics_df.to_string(index=False))
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print(" KEY DIFFERENCE FROM ORIGINAL ")
-    print("="*70)
-    print("""
+    print("=" * 70)
+    print(
+        """
 In the ORIGINAL implementation:
 - EO thresholds were tuned using TEST set labels
 - This is DATA LEAKAGE - thresholds are optimized for the same data
@@ -300,15 +300,14 @@ In this LEAKAGE-FREE implementation:
 - TEST set labels are never seen during threshold selection
 - Results may show less dramatic fairness improvements, but they
   are HONEST and GENERALIZABLE to new data
-""")
+"""
+    )
 
     return models, metrics_df
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Leakage-free fairness evaluation pipeline"
-    )
+    parser = argparse.ArgumentParser(description="Leakage-free fairness evaluation pipeline")
     parser.add_argument(
         "--data-path",
         default="data/processed/adult/adult_model_ready.csv",

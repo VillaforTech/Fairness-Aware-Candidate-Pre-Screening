@@ -16,7 +16,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -66,6 +65,7 @@ def _success(msg: str) -> None:
 # TRAIN COMMAND
 # ============================================================================
 
+
 def train_command(
     model: str = "xgb",
     seed: int = 42,
@@ -86,9 +86,11 @@ def train_command(
     try:
         # Import here to avoid circular imports
         import sys
+
         sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
         from src.main import main as run_pipeline
+
         run_pipeline(step="1", data_path=data_path, generate_plots_flag=False)
         _success("Training completed successfully!")
     except Exception as e:
@@ -99,6 +101,7 @@ def train_command(
 # ============================================================================
 # EVALUATE COMMAND
 # ============================================================================
+
 
 def evaluate_command(
     run_id: str | None = None,
@@ -116,9 +119,11 @@ def evaluate_command(
 
     try:
         import sys
+
         sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
         from src.main import main as run_pipeline
+
         run_pipeline(step="all", data_path=data_path, generate_plots_flag=False)
         _success("Evaluation completed!")
     except Exception as e:
@@ -129,6 +134,7 @@ def evaluate_command(
 # ============================================================================
 # MITIGATE COMMAND
 # ============================================================================
+
 
 def mitigate_command(
     technique: str = "eo",
@@ -152,9 +158,11 @@ def mitigate_command(
 
     try:
         import sys
+
         sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
         from src.main import main as run_pipeline
+
         run_pipeline(step="2", data_path=data_path, generate_plots_flag=False)
         _success("Mitigation completed!")
     except Exception as e:
@@ -165,6 +173,7 @@ def mitigate_command(
 # ============================================================================
 # PLOT COMMAND
 # ============================================================================
+
 
 def plot_command(
     metrics_path: str = "data/metrics/step2_metrics.csv",
@@ -180,9 +189,11 @@ def plot_command(
 
     try:
         import sys
+
         sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
         from src.plots.plot_step2 import main as plot_main
+
         plot_main()
         _success(f"Plots saved to {output_dir}")
     except Exception as e:
@@ -193,6 +204,7 @@ def plot_command(
 # ============================================================================
 # DATA COMMANDS
 # ============================================================================
+
 
 def data_download_command(
     output_dir: str = "data/raw/adult",
@@ -226,6 +238,7 @@ def data_preprocess_command(
 # PREDICT COMMAND
 # ============================================================================
 
+
 def predict_command(
     model_path: str,
     input_csv: str,
@@ -249,14 +262,16 @@ def predict_command(
 # ============================================================================
 
 if HAS_TYPER:
+
     @app.command()
     def train(
         model: str = typer.Option("xgb", "--model", "-m", help="Model type: lr, rf, xgb"),
         seed: int = typer.Option(42, "--seed", "-s", help="Random seed"),
         data_path: str = typer.Option(
             "data/processed/adult/adult_model_ready.csv",
-            "--data-path", "-d",
-            help="Path to processed data"
+            "--data-path",
+            "-d",
+            help="Path to processed data",
         ),
     ) -> None:
         """Train a fairness-aware model."""
@@ -268,7 +283,8 @@ if HAS_TYPER:
         split: str = typer.Option("test", "--split", help="Data split"),
         data_path: str = typer.Option(
             "data/processed/adult/adult_model_ready.csv",
-            "--data-path", "-d",
+            "--data-path",
+            "-d",
         ),
     ) -> None:
         """Evaluate a trained model."""
@@ -281,7 +297,8 @@ if HAS_TYPER:
         run_id: str = typer.Option(None, "--run-id", "-r"),
         data_path: str = typer.Option(
             "data/processed/adult/adult_model_ready.csv",
-            "--data-path", "-d",
+            "--data-path",
+            "-d",
         ),
     ) -> None:
         """Apply fairness mitigation."""
@@ -296,7 +313,8 @@ if HAS_TYPER:
     def plot(
         metrics_path: str = typer.Option(
             "data/metrics/step2_metrics.csv",
-            "--metrics-path", "-m",
+            "--metrics-path",
+            "-m",
         ),
         output_dir: str = typer.Option("data/plots/step2", "--output-dir", "-o"),
     ) -> None:
@@ -324,7 +342,8 @@ if HAS_TYPER:
         input_path: str = typer.Option("data/raw/adult", "--input-path", "-i"),
         output_path: str = typer.Option(
             "data/processed/adult/adult_model_ready.csv",
-            "--output-path", "-o",
+            "--output-path",
+            "-o",
         ),
     ) -> None:
         """Preprocess the dataset."""
@@ -334,6 +353,7 @@ if HAS_TYPER:
 # ============================================================================
 # ARGPARSE CLI (fallback)
 # ============================================================================
+
 
 def build_argparse_cli() -> argparse.ArgumentParser:
     """Build argparse CLI for when Typer is not available."""
@@ -347,20 +367,26 @@ def build_argparse_cli() -> argparse.ArgumentParser:
     train_parser = subparsers.add_parser("train", help="Train a model")
     train_parser.add_argument("--model", "-m", default="xgb", choices=["lr", "rf", "xgb"])
     train_parser.add_argument("--seed", "-s", type=int, default=42)
-    train_parser.add_argument("--data-path", "-d", default="data/processed/adult/adult_model_ready.csv")
+    train_parser.add_argument(
+        "--data-path", "-d", default="data/processed/adult/adult_model_ready.csv"
+    )
 
     # Evaluate command
     eval_parser = subparsers.add_parser("evaluate", help="Evaluate a model")
     eval_parser.add_argument("--run-id", "-r", default=None)
     eval_parser.add_argument("--split", default="test")
-    eval_parser.add_argument("--data-path", "-d", default="data/processed/adult/adult_model_ready.csv")
+    eval_parser.add_argument(
+        "--data-path", "-d", default="data/processed/adult/adult_model_ready.csv"
+    )
 
     # Mitigate command
     mit_parser = subparsers.add_parser("mitigate", help="Apply fairness mitigation")
     mit_parser.add_argument("technique", default="eo", nargs="?")
     mit_parser.add_argument("--sensitive", "-s", default="sex")
     mit_parser.add_argument("--run-id", "-r", default=None)
-    mit_parser.add_argument("--data-path", "-d", default="data/processed/adult/adult_model_ready.csv")
+    mit_parser.add_argument(
+        "--data-path", "-d", default="data/processed/adult/adult_model_ready.csv"
+    )
 
     # Plot command
     plot_parser = subparsers.add_parser("plot", help="Generate plots")
@@ -382,7 +408,9 @@ def build_argparse_cli() -> argparse.ArgumentParser:
 
     prep_parser = data_sub.add_parser("preprocess", help="Preprocess dataset")
     prep_parser.add_argument("--input-path", "-i", default="data/raw/adult")
-    prep_parser.add_argument("--output-path", "-o", default="data/processed/adult/adult_model_ready.csv")
+    prep_parser.add_argument(
+        "--output-path", "-o", default="data/processed/adult/adult_model_ready.csv"
+    )
 
     return parser
 
@@ -439,6 +467,7 @@ def run_argparse_cli() -> None:
 # ============================================================================
 # MAIN ENTRY POINT
 # ============================================================================
+
 
 def main() -> None:
     """Main CLI entry point."""

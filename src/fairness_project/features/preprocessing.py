@@ -9,7 +9,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 if TYPE_CHECKING:
-    from typing import Tuple, List
+    pass
 
 
 # Columns that should be excluded from features
@@ -19,7 +19,7 @@ EXCLUDE_COLUMNS = ["sex", "race", "race_binary", "income", "split"]
 def build_preprocessing_pipeline(
     df: pd.DataFrame,
     exclude_cols: list[str] | None = None,
-) -> Tuple[ColumnTransformer, List[str], List[str]]:
+) -> tuple[ColumnTransformer, list[str], list[str]]:
     """
     Build a sklearn preprocessing pipeline for the Adult dataset.
 

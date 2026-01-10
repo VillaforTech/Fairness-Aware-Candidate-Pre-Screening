@@ -152,7 +152,7 @@ def print_evaluation_summary(
     label : str
         Label for the model/condition.
     """
-    print(f"\n {'='*20} {label} {'='*20}")
+    print(f"\n {'=' * 20} {label} {'=' * 20}")
 
     print("\nPerformance:")
     print(f"  Accuracy : {metrics['accuracy']:.4f}")
@@ -168,7 +168,7 @@ def print_evaluation_summary(
     print(f"  DI       : {metrics['DI']:.4f}")
     print(f"  TPR Gap  : {metrics['TPR_gap']:.4f}")
 
-    print(f"\nTPR by Group:")
+    print("\nTPR by Group:")
     print(f"  Privileged   : {metrics['TPR_priv']:.4f}")
     print(f"  Unprivileged : {metrics['TPR_unpriv']:.4f}")
 
@@ -192,7 +192,15 @@ def compare_baseline_vs_eo(
     pd.DataFrame
         Comparison table.
     """
-    metrics_to_compare = ["accuracy", "precision", "recall", "f1", "SPD", "DI", "TPR_gap"]
+    metrics_to_compare = [
+        "accuracy",
+        "precision",
+        "recall",
+        "f1",
+        "SPD",
+        "DI",
+        "TPR_gap",
+    ]
 
     rows = []
     for metric in metrics_to_compare:
@@ -201,11 +209,13 @@ def compare_baseline_vs_eo(
             eo_val = eo_metrics[metric]
             change = eo_val - baseline_val if baseline_val is not None else None
 
-            rows.append({
-                "Metric": metric,
-                "Baseline": baseline_val,
-                "EO-Adjusted": eo_val,
-                "Change": change,
-            })
+            rows.append(
+                {
+                    "Metric": metric,
+                    "Baseline": baseline_val,
+                    "EO-Adjusted": eo_val,
+                    "Change": change,
+                }
+            )
 
     return pd.DataFrame(rows)

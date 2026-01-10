@@ -105,9 +105,9 @@ def run_batch_inference(
     # Summary
     n_positive = (predictions == 1).sum()
     n_negative = (predictions == 0).sum()
-    print(f"\nPrediction summary:")
-    print(f"  Positive (>50K): {n_positive} ({n_positive/len(predictions)*100:.1f}%)")
-    print(f"  Negative (<=50K): {n_negative} ({n_negative/len(predictions)*100:.1f}%)")
+    print("\nPrediction summary:")
+    print(f"  Positive (>50K): {n_positive} ({n_positive / len(predictions) * 100:.1f}%)")
+    print(f"  Negative (<=50K): {n_negative} ({n_negative / len(predictions) * 100:.1f}%)")
 
     return result
 
@@ -152,17 +152,20 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Run batch inference")
     parser.add_argument(
-        "--model-path", "-m",
+        "--model-path",
+        "-m",
         required=True,
         help="Path to saved model (.joblib)",
     )
     parser.add_argument(
-        "--input-csv", "-i",
+        "--input-csv",
+        "-i",
         required=True,
         help="Path to input CSV",
     )
     parser.add_argument(
-        "--output-csv", "-o",
+        "--output-csv",
+        "-o",
         required=True,
         help="Path to save predictions",
     )
