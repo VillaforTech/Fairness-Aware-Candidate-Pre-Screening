@@ -1,7 +1,7 @@
 """
 FastAPI inference API.
 
-Provides a REST API for model predictions.
+Provides a versioned REST API for model predictions with structured audit logging.
 
 Usage:
     uvicorn fairness_project.inference.api:app --host 0.0.0.0 --port 8000
@@ -9,18 +9,57 @@ Usage:
 
 from __future__ import annotations
 
+import json
+import logging
 import os
+from contextlib import asynccontextmanager
+from datetime import datetime
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
 # Check for FastAPI availability
 try:
-    from fastapi import FastAPI, HTTPException
+    from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
     from pydantic import BaseModel, Field
 
     HAS_FASTAPI = True
 except ImportError:
     HAS_FASTAPI = False
+
+
+# ================================================================
+# Structured JSON Logging
+# ================================================================
+
+
+class JSONFormatter(logging.Formatter):
+    """Format log records as JSON lines."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        log_data = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if hasattr(record, "extra_data"):
+            log_data.update(record.extra_data)
+        return json.dumps(log_data, default=str)
+
+
+def _setup_logging() -> logging.Logger:
+    """Configure structured logging for the API."""
+    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    logger = logging.getLogger("fairness_project.api")
+    logger.setLevel(getattr(logging, log_level, logging.INFO))
+
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(JSONFormatter())
+        logger.addHandler(handler)
+
+    return logger
 
 
 if HAS_FASTAPI:
@@ -86,89 +125,167 @@ if HAS_FASTAPI:
         status: str
         model_loaded: bool
 
+    class MetadataResponse(BaseModel):
+        """Metadata response for governance and audit."""
+
+        model_version: str | None = None
+        trained_at: str | None = None
+        model_type: str | None = None
+        fairness_metrics: dict[str, Any] = Field(default_factory=dict)
+        api_version: str = "v1"
+
     # ================================================================
-    # Application
+    # Dependency Injection
+    # ================================================================
+
+    def get_model(request: Request) -> Any:
+        """Get the loaded model from app state or raise 503."""
+        model = getattr(request.app.state, "model", None)
+        if model is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Model not loaded. Set MODEL_PATH env var.",
+            )
+        return model
+
+    # ================================================================
+    # Lifespan
+    # ================================================================
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        """Manage application startup and shutdown."""
+        logger = _setup_logging()
+
+        # Initialize config if CONFIG_PATH is set
+        config_path = os.environ.get("CONFIG_PATH")
+        if config_path and Path(config_path).exists():
+            from fairness_project.config import init_config
+
+            init_config(config_path)
+            logger.info("Configuration loaded from %s", config_path)
+
+        # Load model
+        app.state.model = None
+        app.state.metadata = {}
+
+        model_path = os.environ.get("MODEL_PATH")
+        if model_path and Path(model_path).exists():
+            import joblib
+
+            app.state.model = joblib.load(model_path)
+            logger.info("Model loaded from %s", model_path)
+
+            # Try to load metadata from registry run.json alongside model
+            run_json = Path(model_path).parent / "run.json"
+            if run_json.exists():
+                with open(run_json) as f:
+                    app.state.metadata = json.load(f)
+                logger.info(
+                    "Metadata loaded, run_id=%s, model_type=%s",
+                    app.state.metadata.get("run_id"),
+                    app.state.metadata.get("model_type"),
+                )
+
+            # Try to load fairness metrics
+            metrics_json = Path(model_path).parent / "metrics.json"
+            if metrics_json.exists():
+                with open(metrics_json) as f:
+                    app.state.metadata["fairness_metrics"] = json.load(f)
+
+        else:
+            logger.warning("No MODEL_PATH set or file not found; model not loaded")
+
+        yield
+
+        logger.info("Shutting down API")
+
+    # ================================================================
+    # Application & Routers
     # ================================================================
 
     app = FastAPI(
         title="Fairness Project API",
         description="API for fairness-aware candidate pre-screening predictions",
-        version="0.1.0",
+        version="1.0.0",
+        lifespan=lifespan,
     )
 
-    # Global model storage
-    _model: Any = None
+    v1_router = APIRouter(prefix="/v1")
 
-    def get_model() -> Any:
-        """Get the loaded model or raise error."""
-        global _model
-        if _model is None:
-            raise HTTPException(
-                status_code=503,
-                detail="Model not loaded. Call /load-model first or set MODEL_PATH env var.",
-            )
-        return _model
-
-    @app.on_event("startup")
-    async def startup_event():
-        """Load model on startup if MODEL_PATH is set."""
-        global _model
-        model_path = os.environ.get("MODEL_PATH")
-        if model_path and Path(model_path).exists():
-            import joblib
-
-            _model = joblib.load(model_path)
-            print(f"Model loaded from: {model_path}")
+    # ================================================================
+    # Root-level health check (unversioned)
+    # ================================================================
 
     @app.get("/health", response_model=HealthResponse)
-    async def health_check() -> HealthResponse:
+    async def health_check(request: Request) -> HealthResponse:
         """Health check endpoint."""
-        return HealthResponse(status="healthy", model_loaded=_model is not None)
+        model = getattr(request.app.state, "model", None)
+        return HealthResponse(status="healthy", model_loaded=model is not None)
 
-    @app.post("/load-model")
-    async def load_model(model_path: str) -> dict[str, str]:
-        """Load a model from path."""
-        global _model
-        path = Path(model_path)
-        if not path.exists():
-            raise HTTPException(status_code=404, detail=f"Model not found: {model_path}")
+    # ================================================================
+    # V1 Routes
+    # ================================================================
 
-        import joblib
+    @v1_router.get("/metadata", response_model=MetadataResponse)
+    async def metadata(request: Request) -> MetadataResponse:
+        """Return model and governance metadata."""
+        meta = getattr(request.app.state, "metadata", {})
+        return MetadataResponse(
+            model_version=meta.get("run_id"),
+            trained_at=meta.get("saved_at") or meta.get("timestamp"),
+            model_type=meta.get("model_type"),
+            fairness_metrics=meta.get("fairness_metrics", {}),
+            api_version="v1",
+        )
 
-        _model = joblib.load(path)
-        return {"status": "loaded", "model_path": model_path}
-
-    @app.post("/predict", response_model=PredictionOutput)
-    async def predict(input_data: PredictionInput) -> PredictionOutput:
+    @v1_router.post("/predict", response_model=PredictionOutput)
+    async def predict(
+        input_data: PredictionInput, model: Any = Depends(get_model)
+    ) -> PredictionOutput:
         """Make a single prediction."""
         import pandas as pd
 
-        model = get_model()
+        logger = logging.getLogger("fairness_project.api")
 
-        # Convert to DataFrame
         df = pd.DataFrame([input_data.model_dump()])
-
-        # Predict
         prediction = model.predict(df)[0]
         probability = model.predict_proba(df)[0, 1]
 
-        return PredictionOutput(
+        result = PredictionOutput(
             prediction=int(prediction),
             probability=float(probability),
             label=">50K" if prediction == 1 else "<=50K",
         )
 
-    @app.post("/predict-batch", response_model=BatchPredictionOutput)
-    async def predict_batch(input_data: BatchPredictionInput) -> BatchPredictionOutput:
+        # Audit log (hash input to avoid PII in logs)
+        input_hash = sha256(
+            json.dumps(input_data.model_dump(), sort_keys=True).encode()
+        ).hexdigest()[:12]
+        logger.info(
+            "prediction",
+            extra={
+                "extra_data": {
+                    "endpoint": "/v1/predict",
+                    "input_hash": input_hash,
+                    "prediction": result.prediction,
+                    "probability": round(result.probability, 4),
+                }
+            },
+        )
+
+        return result
+
+    @v1_router.post("/predict-batch", response_model=BatchPredictionOutput)
+    async def predict_batch(
+        input_data: BatchPredictionInput, model: Any = Depends(get_model)
+    ) -> BatchPredictionOutput:
         """Make batch predictions."""
         import pandas as pd
 
-        model = get_model()
+        logger = logging.getLogger("fairness_project.api")
 
-        # Convert to DataFrame
         df = pd.DataFrame([inst.model_dump() for inst in input_data.instances])
-
-        # Predict
         predictions = model.predict(df)
         probabilities = model.predict_proba(df)[:, 1]
 
@@ -181,13 +298,26 @@ if HAS_FASTAPI:
             for pred, prob in zip(predictions, probabilities, strict=False)
         ]
 
+        logger.info(
+            "batch_prediction",
+            extra={
+                "extra_data": {
+                    "endpoint": "/v1/predict-batch",
+                    "batch_size": len(input_data.instances),
+                }
+            },
+        )
+
         return BatchPredictionOutput(predictions=results)
+
+    # Mount v1 router
+    app.include_router(v1_router)
 
 else:
     # Fallback when FastAPI not available
     app = None
 
-    def get_model():
+    def get_model(request=None):
         raise RuntimeError("FastAPI not installed. Install with: pip install fastapi uvicorn")
 
 

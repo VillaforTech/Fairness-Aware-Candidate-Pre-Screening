@@ -15,8 +15,13 @@ services:
       - ./models:/app/models:ro
       # Mount runs directory for model registry access
       - ./runs:/app/runs:ro
+      # Mount configs for override
+      - ./configs:/app/configs:ro
     environment:
       - MODEL_PATH=/app/models/model.joblib
+      - CONFIG_PATH=/app/configs/default.yaml
+      - WORKERS=4
+      - LOG_LEVEL=info
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -24,11 +29,3 @@ services:
       retries: 3
       start_period: 10s
     restart: unless-stopped
-
-  # Optional: monitoring service (placeholder)
-  # monitor:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.monitor
-  #   depends_on:
-  #     - api
