@@ -61,6 +61,14 @@ def _success(msg: str) -> None:
     _print(f"{msg}", "bold green")
 
 
+def _load_config(config_path: str | None) -> None:
+    """Load configuration if a path is provided."""
+    if config_path:
+        from fairness_project.config import init_config
+
+        init_config(config_path)
+
+
 # ============================================================================
 # TRAIN COMMAND
 # ============================================================================
@@ -215,8 +223,15 @@ def data_download_command(
         output_dir: Directory to save raw data
     """
     _print(f"Downloading Adult dataset to {output_dir}")
-    _print("Note: Data download not yet implemented. Please manually download from UCI.")
-    _print("URL: https://archive.ics.uci.edu/ml/datasets/adult")
+
+    try:
+        from fairness_project.data.download import download_adult_dataset
+
+        download_adult_dataset(output_dir=output_dir)
+        _success("Download completed!")
+    except Exception as e:
+        _error(f"Download failed: {e}")
+        raise
 
 
 def data_preprocess_command(
@@ -226,12 +241,27 @@ def data_preprocess_command(
     """Preprocess the dataset.
 
     Args:
-        input_path: Path to raw data
+        input_path: Path to raw data directory
         output_path: Path to save processed data
     """
     _print(f"Preprocessing data from {input_path}")
-    _print("Note: Data preprocessing not yet implemented via CLI.")
-    _print("Please run the preprocessing notebook or script manually.")
+
+    try:
+        from fairness_project.data.preprocess import prepare_model_ready_data
+
+        input_dir = Path(input_path)
+        train_path = input_dir / "adult.data"
+        test_path = input_dir / "adult.test"
+
+        prepare_model_ready_data(
+            train_path=str(train_path),
+            test_path=str(test_path),
+            output_path=output_path,
+        )
+        _success(f"Preprocessed data saved to {output_path}")
+    except Exception as e:
+        _error(f"Preprocessing failed: {e}")
+        raise
 
 
 # ============================================================================
@@ -253,8 +283,18 @@ def predict_command(
     """
     _print(f"Loading model from {model_path}")
     _print(f"Processing {input_csv}")
-    _print("Note: Batch prediction not yet implemented.")
-    _error("This feature requires model persistence (PR9)")
+
+    try:
+        import joblib
+
+        from fairness_project.inference.batch import run_batch_inference
+
+        model = joblib.load(model_path)
+        run_batch_inference(model=model, input_path=input_csv, output_path=output_csv)
+        _success(f"Predictions saved to {output_csv}")
+    except Exception as e:
+        _error(f"Prediction failed: {e}")
+        raise
 
 
 # ============================================================================
@@ -262,6 +302,13 @@ def predict_command(
 # ============================================================================
 
 if HAS_TYPER:
+
+    @app.callback()
+    def cli_callback(
+        config: str = typer.Option(None, "--config", "-c", help="Path to YAML config file"),
+    ) -> None:
+        """Fairness-aware candidate pre-screening CLI."""
+        _load_config(config)
 
     @app.command()
     def train(
@@ -361,6 +408,7 @@ def build_argparse_cli() -> argparse.ArgumentParser:
         prog="fairness",
         description="Fairness-aware candidate pre-screening CLI",
     )
+    parser.add_argument("--config", "-c", default=None, help="Path to YAML config file")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Train command
@@ -419,6 +467,9 @@ def run_argparse_cli() -> None:
     """Run the argparse-based CLI."""
     parser = build_argparse_cli()
     args = parser.parse_args()
+
+    # Load config if provided
+    _load_config(getattr(args, "config", None))
 
     if args.command == "train":
         train_command(
