@@ -1,5 +1,12 @@
 # Model Card: Fairness-Aware Candidate Pre-Screening
 
+> To generate a model card with live metrics from a specific run:
+> ```bash
+> python -m fairness_project.evaluation.model_card --run-id <run_id>
+> ```
+> This will overwrite this file with auto-generated content including performance tables,
+> fairness metrics, and governance gate status from the specified run.
+
 ## Model Details
 
 ### Overview

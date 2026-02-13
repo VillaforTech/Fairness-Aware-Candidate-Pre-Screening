@@ -113,6 +113,50 @@ from fairness_project.data.schema import validate_dataframe
 errors = validate_dataframe(df)
 ```
 
+### API Input Schema
+
+The prediction API accepts 12 fields. Protected attributes (`sex`, `race`) and the target (`income`) are intentionally excluded from the input schema.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `age` | int | 0-120 | Age of individual |
+| `workclass` | string | required | Type of employment (Private, Self-emp-not-inc, Self-emp-inc, Federal-gov, Local-gov, State-gov, Without-pay, Never-worked) |
+| `fnlwgt` | int | >= 0 | Final sampling weight |
+| `education` | string | required | Highest education level (Bachelors, Some-college, 11th, HS-grad, Prof-school, Assoc-acdm, Assoc-voc, 9th, 7th-8th, 12th, Masters, 1st-4th, 10th, Doctorate, 5th-6th, Preschool) |
+| `education_num` | int | 1-20 | Education level as number |
+| `marital_status` | string | required | Marital status (Married-civ-spouse, Divorced, Never-married, Separated, Widowed, Married-spouse-absent, Married-AF-spouse) |
+| `occupation` | string | required | Type of occupation (Tech-support, Craft-repair, Other-service, Sales, Exec-managerial, Prof-specialty, Handlers-cleaners, Machine-op-inspct, Adm-clerical, Farming-fishing, Transport-moving, Priv-house-serv, Protective-serv, Armed-Forces) |
+| `relationship` | string | required | Relationship status (Wife, Own-child, Husband, Not-in-family, Other-relative, Unmarried) |
+| `native_country` | string | required | Country of origin |
+| `capital_gain` | int | >= 0 | Capital gains |
+| `capital_loss` | int | >= 0 | Capital losses |
+| `hours_per_week` | int | 0-168 | Hours worked per week |
+
+**Unknown value handling**: The preprocessing pipeline uses `OneHotEncoder` with `handle_unknown="ignore"`, so unseen categorical values are mapped to a zero vector rather than causing errors.
+
+### Data Lineage
+
+**Training flow**:
+
+```
+UCI Repository → Download (raw/) → Preprocess (processed/) → Train/Val/Test Split
+→ Feature Engineering (StandardScaler + OneHotEncoder) → Model Training
+→ Evaluation Report → Governance Gate → Model Registry (runs/)
+```
+
+**Inference flow**:
+
+```
+User Input → Pydantic Validation → DataFrame → Model.predict() → Response → Audit Log
+```
+
+**Traceability**: Each training run produces a `run.json` file containing:
+- `run_id`: Unique identifier (timestamp-based)
+- `timestamp`: When the model was saved
+- `model_type`: Algorithm used (lr, rf, xgb)
+- `config_path`: Configuration file used
+- `git_commit`: Git commit hash at training time
+
 ### Ethical Considerations
 
 This dataset is used for **educational and research purposes** to study algorithmic fairness. When applying similar techniques to real hiring decisions:

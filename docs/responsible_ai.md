@@ -92,6 +92,34 @@ This project is designed for educational purposes. Real-world deployment should 
 2. If performance degradation: Retrain on recent data
 3. If systematic errors: Update thresholds or retrain model
 
+## Governance as Code
+
+Automated governance gates enforce fairness and performance standards before any model can be deployed.
+
+### Pre-Deployment Gate
+
+Every model must pass these thresholds:
+
+| Check | Threshold |
+|-------|-----------|
+| Minimum accuracy | >= 0.80 |
+| Maximum TPR gap | <= 0.05 |
+| Minimum disparate impact | >= 0.80 |
+| Maximum SPD | <= 0.10 |
+
+### Automated CI Checks
+
+The governance gate runs as part of the CI pipeline. Both passing and failing scenarios are validated to ensure the gate works correctly.
+
+### Override Policy
+
+In exceptional cases, a governance gate failure can be overridden with:
+1. Documented justification for why the threshold does not apply
+2. Explicit sign-off from the responsible AI lead
+3. A remediation plan with a timeline for meeting the threshold
+
+For full governance documentation, see [Governance Gate Documentation](governance.md).
+
 ## Version Control
 
 - **Current Version**: 0.1.0
