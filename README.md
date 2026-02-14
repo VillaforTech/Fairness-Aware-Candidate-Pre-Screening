@@ -67,6 +67,28 @@ PYTHONPATH=src python -m fairness_project.cli mitigate eo --sensitive sex
 PYTHONPATH=src python -m fairness_project.cli plot
 ```
 
+### Developer Workflow
+
+The recommended CLI-first pipeline from data to deployment:
+
+```bash
+# 1. Download and preprocess data
+fairness data download
+fairness data preprocess
+
+# 2. Train a model
+fairness train --model xgb --seed 42
+
+# 3. Evaluate performance and fairness
+fairness evaluate
+
+# 4. Run governance gate (pass required before deployment)
+python -m fairness_project.governance.gate --report data/metrics/report.json
+
+# 5. Deploy the API
+MODEL_PATH=models/model.joblib uvicorn fairness_project.inference.api:app --port 8000
+```
+
 ## Project Structure
 
 ```
@@ -107,6 +129,37 @@ fairness-project/
 ├── .github/workflows/ci.yml       # CI pipeline
 ├── Dockerfile                     # API container
 └── docker-compose.yml             # Docker setup
+```
+
+## System Architecture
+
+### Data Flow Pipeline
+
+```mermaid
+flowchart LR
+    A[UCI Repository] --> B[Download]
+    B --> C[Preprocess]
+    C --> D[Train/Val/Test Split]
+    D --> E[Feature Engineering]
+    E --> F[Train Model]
+    F --> G[Governance Gate]
+    G -->|Pass| H[Model Registry]
+    H --> I[REST API]
+    I --> J[Monitoring]
+    J -->|Drift detected| F
+```
+
+### Fairness Pipeline
+
+```mermaid
+flowchart LR
+    A[Raw Predictions] --> B[Baseline Metrics]
+    B --> C[EO Tuning\nval set only]
+    C --> D[Apply Thresholds]
+    D --> E[Test Evaluation]
+    E --> F[Governance Gate]
+    F -->|Pass| G[Deploy]
+    F -->|Fail| H[Retrain / Adjust]
 ```
 
 ## Evaluation Protocol
@@ -170,12 +223,17 @@ docker-compose up
 
 ### API Endpoints
 
+Interactive API docs are available at [`/docs`](http://localhost:8000/docs) (Swagger UI) and [`/redoc`](http://localhost:8000/redoc) (ReDoc).
+
 ```bash
 # Health check
 curl http://localhost:8000/health
 
+# Model metadata and fairness metrics
+curl http://localhost:8000/v1/metadata
+
 # Single prediction
-curl -X POST http://localhost:8000/predict \
+curl -X POST http://localhost:8000/v1/predict \
   -H "Content-Type: application/json" \
   -d '{
     "age": 35,
@@ -192,6 +250,8 @@ curl -X POST http://localhost:8000/predict \
     "hours_per_week": 40
   }'
 ```
+
+For the complete API reference, see [API Specification](docs/api_spec.md). For integration examples in Python, see the [API Integration notebook](notebooks/5_API_Integration_Examples.ipynb).
 
 ## Configuration
 
@@ -218,7 +278,10 @@ PYTHONPATH=src pytest tests/ -v
 
 ## Documentation
 
-- [Data Documentation](docs/data.md) - Dataset details and licensing
+- [Data Documentation](docs/data.md) - Dataset details, licensing, and API input schema
+- [API Specification](docs/api_spec.md) - Complete REST API reference
+- [Governance Gate](docs/governance.md) - Pre-deployment fairness checks
+- [Deployment Guide](docs/deployment.md) - Deployment and operations manual
 - [Responsible AI Protocol](docs/responsible_ai.md) - Fairness guidelines
 - [Model Card](docs/model_card.md) - Model specifications
 
