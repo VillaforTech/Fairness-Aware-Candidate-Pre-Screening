@@ -2,12 +2,11 @@
 Data download utilities for the Adult dataset.
 
 The Adult (Census Income) dataset is from the UCI Machine Learning Repository:
-https://archive.ics.uci.edu/ml/datasets/adult
+https://archive.ics.uci.edu/dataset/2/adult
 
 License: CC BY 4.0 (Creative Commons Attribution 4.0 International)
-Citation: Kohavi, R. (1996). Scaling Up the Accuracy of Naive-Bayes Classifiers:
-          A Decision-Tree Hybrid. In Proceedings of the Second International
-          Conference on Knowledge Discovery and Data Mining.
+Citation: Becker, B., & Kohavi, R. (1996). Adult [Dataset].
+          UCI Machine Learning Repository. https://doi.org/10.24432/C5XW20
 """
 
 from __future__ import annotations

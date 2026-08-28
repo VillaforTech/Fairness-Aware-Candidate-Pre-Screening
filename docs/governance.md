@@ -2,7 +2,9 @@
 
 ## Overview
 
-This project implements **governance as code**: automated pre-deployment checks that validate model fairness and performance against configurable thresholds. No model can be deployed unless it passes all governance checks.
+This project demonstrates **governance as code** with automated checks against
+configurable fairness and performance thresholds. The gate is an experimental
+policy check, not evidence that a model is safe, lawful, or suitable for use.
 
 ## Default Thresholds
 
@@ -21,8 +23,8 @@ The default thresholds are defined in `GateThresholds` (`src/fairness_project/go
 flowchart LR
     A[Train Model] --> B[Generate Report]
     B --> C{Governance Gate}
-    C -->|Pass| D[Deploy to Registry]
-    C -->|Fail| E[Block Deployment]
+    C -->|Pass| D[Eligible for Further Review]
+    C -->|Fail| E[Flag Experiment]
     E --> F[Triage & Fix]
     F --> A
 ```
@@ -43,7 +45,8 @@ python -m fairness_project.governance.gate \
 ```
 
 **Exit codes**:
-- `0`: Gate passed, model is safe to deploy
+
+- `0`: The supplied metrics passed the configured thresholds
 - `1`: Gate failed, one or more violations detected
 
 ## Programmatic Usage
@@ -55,10 +58,10 @@ report = {
     "metadata": {"run_id": "20240115_143022"},
     "results": {
         "metrics": {
-            "accuracy": 0.862,
-            "TPR_gap": -0.015,
-            "DI": 0.455,
-            "SPD": 0.158
+            "accuracy": 0.85,
+            "TPR_gap": 0.03,
+            "DI": 0.90,
+            "SPD": 0.05
         }
     }
 }
@@ -76,18 +79,20 @@ result = check_gate(report, thresholds=custom)
 ## Output Format
 
 **Passing gate**:
-```
+
+```text
 Governance Gate: PASSED
 Metrics checked: {
-  "accuracy": 0.862,
-  "TPR_gap": -0.015,
-  "DI": 0.455,
-  "SPD": 0.158
+  "accuracy": 0.85,
+  "TPR_gap": 0.03,
+  "DI": 0.90,
+  "SPD": 0.05
 }
 ```
 
 **Failing gate**:
-```
+
+```text
 Governance Gate: FAILED
 Metrics checked: {
   "accuracy": 0.50,
@@ -104,23 +109,18 @@ Violations:
 
 ## CI Integration
 
-The governance gate runs as part of the CI pipeline in `.github/workflows/ci.yml`:
+The governance-gate job in `.github/workflows/ci.yml` creates fixed passing and
+failing JSON fixtures, then checks that the CLI accepts and rejects them as
+expected.
 
-```yaml
-governance-gate:
-  name: Governance Gate
-  runs-on: ubuntu-latest
-  needs: test
-  steps:
-    - name: Run governance gate
-      run: python -m fairness_project.governance.gate --report path/to/report.json
-```
-
-The CI job validates both that passing reports are accepted and failing reports are rejected.
+This verifies the threshold-checking code. The job does not train a model,
+generate a live evaluation report, or approve an artifact for use.
 
 ## Report Format
 
-The governance gate expects a JSON report with this structure (produced by `evaluation.report.generate_json_report`):
+The governance gate expects a JSON report with this structure. The
+`evaluation.report.generate_json_report` helper can produce it, but the
+documented leakage-free pipeline does not currently call that helper.
 
 ```json
 {
@@ -132,13 +132,13 @@ The governance gate expects a JSON report with this structure (produced by `eval
   },
   "results": {
     "metrics": {
-      "accuracy": 0.862,
-      "precision": 0.746,
-      "recall": 0.654,
-      "f1": 0.697,
-      "SPD": 0.158,
-      "DI": 0.455,
-      "TPR_gap": -0.015
+      "accuracy": 0.85,
+      "precision": 0.75,
+      "recall": 0.65,
+      "f1": 0.70,
+      "SPD": 0.05,
+      "DI": 0.90,
+      "TPR_gap": 0.03
     },
     "thresholds": {
       "privileged": 0.45,
@@ -148,7 +148,8 @@ The governance gate expects a JSON report with this structure (produced by `eval
 }
 ```
 
-The gate checks: `accuracy`, `TPR_gap`, `DI`, and `SPD` from `results.metrics`. Missing metrics are skipped.
+The gate requires `accuracy`, `TPR_gap`, `DI`, and `SPD` under
+`results.metrics`. It fails closed if any required metric is missing.
 
 ## Escalation Process
 
@@ -158,31 +159,26 @@ When the governance gate fails:
 2. **Diagnose**: Determine if the issue is in training data, model configuration, or thresholds
 3. **Fix options**:
    - **Retrain**: Adjust model hyperparameters or training data
-   - **Adjust thresholds**: If the current thresholds are too strict for the use case (requires documented justification)
-   - **Override with approval**: In exceptional cases, a gate failure can be overridden with explicit sign-off from the responsible AI lead
+   - **Revise the experiment**: Change thresholds only as an explicit,
+     documented experimental configuration
 4. **Document**: Record the decision and rationale in the run metadata
 
-## End-to-End Sequence
+## Current CI Verification Sequence
 
 ```mermaid
 sequenceDiagram
     participant Dev as Developer
     participant CI as CI Pipeline
     participant Gate as Governance Gate
-    participant Reg as Model Registry
-    participant Prod as Production API
 
-    Dev->>CI: Push code / trigger training
-    CI->>CI: Run tests
-    CI->>CI: Train model & generate report
-    CI->>Gate: Submit report for validation
-    Gate->>Gate: Check thresholds
-    alt Gate passes
-        Gate->>Reg: Register model
-        Reg->>Prod: Deploy model
-        Prod->>Prod: Health check passes
-    else Gate fails
-        Gate->>Dev: Report violations
-        Dev->>Dev: Fix and retry
-    end
+    Dev->>CI: Push code
+    CI->>CI: Run unit tests
+    CI->>CI: Create fixed pass/fail fixtures
+    CI->>Gate: Submit fixture reports
+    Gate-->>CI: Accept pass fixture
+    Gate-->>CI: Reject fail fixture
 ```
+
+Connecting a freshly trained model to this check would require an explicit
+report-generation step plus provenance and review controls that are not yet
+implemented.

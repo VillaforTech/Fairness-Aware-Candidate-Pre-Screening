@@ -232,7 +232,8 @@ def generate_markdown_report(
     lines.append("This evaluation uses a **leakage-free protocol**:")
     lines.append("- EO thresholds are tuned on validation data only")
     lines.append("- Test set labels are never used during threshold selection")
-    lines.append("- Results are generalizable to unseen data")
+    lines.append("- This avoids threshold-selection leakage on the test split")
+    lines.append("- It does not establish external validity or generalization")
     lines.append("")
 
     content = "\n".join(lines)

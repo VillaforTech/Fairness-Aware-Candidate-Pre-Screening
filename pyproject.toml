@@ -5,18 +5,16 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fairness-project"
 version = "0.1.0"
-description = "Fairness-aware candidate pre-screening system with bias mitigation"
+description = "Educational responsible-ML evaluation project using the UCI Adult dataset"
 readme = "README.md"
-license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
-    {name = "VillafuerTech"}
+    {name = "Roberto Villafuerte"}
 ]
-keywords = ["fairness", "machine-learning", "bias-mitigation", "hiring", "equal-opportunity"]
+keywords = ["fairness", "machine-learning", "bias-mitigation", "responsible-ai", "equal-opportunity"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -63,8 +61,8 @@ all = [
 fairness = "fairness_project.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/VillafuerTech/fairness-project"
-Repository = "https://github.com/VillafuerTech/fairness-project"
+Homepage = "https://github.com/VillaforTech/Fairness-Aware-Candidate-Pre-Screening"
+Repository = "https://github.com/VillaforTech/Fairness-Aware-Candidate-Pre-Screening"
 
 [tool.setuptools.packages.find]
 where = ["src"]

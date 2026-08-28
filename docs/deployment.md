@@ -1,146 +1,45 @@
-# Deployment & Operations Manual
+# API Scaffold and Operations Notes
 
-## Local Development
+> **Current status:** The routes are tested with mock models, but the bundled
+> XGBoost artifact is incompatible with the API's 12-field input schema.
+> End-to-end prediction serving and the Docker path are not currently verified.
 
-```bash
-# Install with API dependencies
-pip install -e ".[api]"
+## Verified Scope
 
-# Start the development server with auto-reload
-MODEL_PATH=models/model.joblib uvicorn fairness_project.inference.api:app \
-  --host 0.0.0.0 --port 8000 --reload
-```
-
-The `--reload` flag watches for file changes and restarts the server automatically.
-
-## Docker
-
-### Build and Run
+The API test suite verifies request validation, health and metadata responses,
+single predictions, and batch predictions by injecting mock models:
 
 ```bash
-# Build the image
-docker build -t fairness-api .
-
-# Run with model volume mount
-docker run -p 8000:8000 \
-  -v $(pwd)/models:/app/models \
-  -e MODEL_PATH=/app/models/model.joblib \
-  fairness-api
+python -m pip install -e ".[dev,api]"
+pytest tests/test_api.py -q
 ```
 
-### Docker Compose
+These tests establish route behavior only. They do not establish compatibility
+with a trained artifact or a runnable deployment.
 
-```bash
-# Start all services
-docker-compose up
+## Known Blockers
 
-# Start in background
-docker-compose up -d
+- The tracked XGBoost pipeline expects 14 raw features, while the API accepts 12.
+  An actual `/v1/predict` request therefore fails with the bundled artifact.
+- The tracked joblib artifact emits scikit-learn and XGBoost compatibility
+  warnings when loaded with the current unconstrained dependency versions.
+- There is no end-to-end test that trains, saves, loads, and serves one artifact.
+- The Dockerfile and Compose configuration have not passed an end-to-end smoke
+  test with a compatible model.
+- The service has no authentication, authorization, rate limiting, or deployment
+  security review.
 
-# Override config file
-docker-compose run -e CONFIG_PATH=/app/configs/custom.yaml fairness-api
-```
+## Interface Contract
 
-## Environment Variables
+The intended request and response shapes are documented in
+[API Specification](api_spec.md). They should be treated as a development target
+until the blockers above are resolved.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MODEL_PATH` | *(none)* | Path to the joblib model file. Required for predictions. |
-| `CONFIG_PATH` | *(none)* | Path to YAML config file. Optional; uses defaults if not set. |
-| `WORKERS` | `1` | Number of uvicorn worker processes. |
-| `LOG_LEVEL` | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
+## Exit Criteria for a Verified Local Demo
 
-## Health Checks
-
-| Probe | Endpoint | Purpose |
-|-------|----------|---------|
-| Liveness | `GET /health` | Server is running |
-| Readiness | `GET /v1/metadata` | Model is loaded and serving |
-
-Example health check in Docker Compose:
-
-```yaml
-healthcheck:
-  test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-  interval: 30s
-  timeout: 5s
-  retries: 3
-```
-
-## Monitoring and Logging
-
-All API logs are emitted as structured JSON lines:
-
-```json
-{
-  "timestamp": "2024-01-15T14:30:22.123456Z",
-  "level": "INFO",
-  "logger": "fairness_project.api",
-  "message": "prediction",
-  "endpoint": "/v1/predict",
-  "input_hash": "a1b2c3d4e5f6",
-  "prediction": 1,
-  "probability": 0.73
-}
-```
-
-Pipe logs to your aggregation system (ELK, CloudWatch, Datadog) for monitoring prediction distributions and latency.
-
-## Scaling
-
-### Horizontal Scaling
-
-Increase the number of container replicas behind a load balancer:
-
-```yaml
-# docker-compose.yml
-services:
-  api:
-    deploy:
-      replicas: 3
-```
-
-### Vertical Scaling
-
-Increase workers per container:
-
-```bash
-docker run -e WORKERS=4 -p 8000:8000 fairness-api
-```
-
-## Model Updates
-
-Zero-downtime model update procedure:
-
-1. **Train** a new model: `fairness train --model xgb`
-2. **Evaluate**: `fairness evaluate`
-3. **Gate check**: `python -m fairness_project.governance.gate --report <report_path>`
-4. **Copy** the new model file to the model volume
-5. **Restart** the API container (graceful): `docker-compose restart api`
-6. **Verify**: `curl http://localhost:8000/v1/metadata` to confirm the new model version
-
-## Security Notes
-
-- **No built-in authentication**: The API does not include auth. For production, place it behind a reverse proxy (nginx, Traefik) with TLS and authentication.
-- **PII hashing**: Input data is hashed in audit logs. Raw PII is never persisted in logs.
-- **Protected attributes excluded**: The prediction input schema intentionally excludes `sex`, `race`, and `income` fields.
-
-## Troubleshooting
-
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| 503 "Model not loaded" | `MODEL_PATH` not set or file missing | Set `MODEL_PATH` to a valid `.joblib` file |
-| Connection refused on :8000 | Server not running | Start with `uvicorn fairness_project.inference.api:app` |
-| High latency on batch requests | Large batch size or single worker | Increase `WORKERS` or reduce batch size |
-| Model predictions differ from training | Different preprocessing pipeline | Ensure the model file includes the full sklearn pipeline |
-
-## Production Checklist
-
-- [ ] Governance gate passed for the deployed model
-- [ ] `MODEL_PATH` points to the gated model file
-- [ ] `LOG_LEVEL` set to `INFO` or `WARNING`
-- [ ] Health check probes configured
-- [ ] Structured logs piped to aggregation
-- [ ] TLS termination and authentication configured at reverse proxy
-- [ ] Rate limiting configured
-- [ ] Monitoring alerts for 5xx errors and latency spikes
+1. Define one canonical feature schema shared by training and inference.
+2. Train and serialize an artifact in a pinned environment.
+3. Add an integration test that loads the artifact and receives HTTP 200 from
+   `/v1/predict` for a documented fixture.
+4. Build the Docker image and repeat the same prediction smoke test.
+5. Record the exact dependency lock, artifact provenance, and expected output.

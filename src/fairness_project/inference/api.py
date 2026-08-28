@@ -206,7 +206,7 @@ if HAS_FASTAPI:
 
     app = FastAPI(
         title="Fairness Project API",
-        description="API for fairness-aware candidate pre-screening predictions",
+        description="Educational API for the Adult-income classification example",
         version="1.0.0",
         lifespan=lifespan,
     )

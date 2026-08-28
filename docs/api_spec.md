@@ -2,12 +2,19 @@
 
 ## Overview
 
-The Fairness Project API provides a versioned REST interface for fairness-aware candidate pre-screening predictions.
+The Fairness Project API provides a versioned REST interface for the
+repository's Adult-income classification example.
+
+> **Status:** Route tests use mock models. The bundled artifact is incompatible
+> with the current request schema, so this is an intended interface contract,
+> not a verified end-to-end service.
 
 - **Base URL**: `http://localhost:8000`
 - **API Prefix**: `/v1/`
 - **Content Type**: `application/json`
-- **Interactive Docs**: Swagger UI at [`/docs`](http://localhost:8000/docs), ReDoc at [`/redoc`](http://localhost:8000/redoc)
+- **Interactive Docs**: Swagger UI at
+  [`/docs`](http://localhost:8000/docs), ReDoc at
+  [`/redoc`](http://localhost:8000/redoc)
 
 ## Endpoints
 
@@ -39,7 +46,7 @@ Unversioned health check endpoint for liveness probes.
 
 ### `GET /v1/metadata`
 
-Returns model version, training info, and fairness metrics for governance and audit purposes.
+Returns model version, training information, and recorded fairness metrics.
 
 **Response** (`MetadataResponse`):
 
@@ -76,7 +83,7 @@ Returns model version, training info, and fairness metrics for governance and au
 
 ### `POST /v1/predict`
 
-Make a single prediction for one candidate.
+Submit one Adult-dataset-compatible record for an income-classification example.
 
 **Request Body** (`PredictionInput`):
 
@@ -140,7 +147,7 @@ Make a single prediction for one candidate.
 
 ### `POST /v1/predict-batch`
 
-Make predictions for multiple candidates in a single request.
+Submit multiple Adult-dataset-compatible records in one request.
 
 **Request Body** (`BatchPredictionInput`):
 
@@ -202,29 +209,33 @@ Make predictions for multiple candidates in a single request.
 
 ## Versioning Strategy
 
-All prediction and metadata endpoints are prefixed with `/v1/`. The health check endpoint is unversioned.
+All prediction and metadata endpoints are prefixed with `/v1/`. The health
+check endpoint is unversioned.
 
 **What constitutes a breaking change** (triggers a new version):
+
 - Removing or renaming request/response fields
 - Changing field types or constraints
 - Removing an endpoint
 - Changing the meaning of existing fields
 
 **Non-breaking changes** (same version):
+
 - Adding optional request fields
 - Adding response fields
 - Adding new endpoints
 - Improving validation messages
 
-**Deprecation policy**: When a new API version is introduced, the previous version will remain available for at least 3 months with a `Deprecation` header in responses.
+**Deprecation policy**: If a new API version is introduced, document its support
+window and return a `Deprecation` header from the older version.
 
 ## Error Codes
 
 | Code | Meaning | Example |
 |------|---------|---------|
 | 200 | Success | Valid prediction returned |
-| 422 | Validation Error | `{"detail": [{"loc": ["body", "age"], "msg": "ensure this value is less than or equal to 120", "type": "value_error"}]}` |
-| 503 | Service Unavailable | `{"detail": "Model not loaded. Set MODEL_PATH env var."}` |
+| 422 | Validation Error | Request body failed validation |
+| 503 | Service Unavailable | Model is not loaded |
 | 500 | Internal Server Error | Unexpected error during prediction |
 
 ## Audit Logging
@@ -244,10 +255,13 @@ Every prediction is logged as a structured JSON line:
 }
 ```
 
-Input data is **never logged directly**. Instead, a SHA-256 hash of the input is recorded for traceability without exposing PII.
+Input data is **not logged directly** by this application. Instead, the example
+logger records a SHA-256 hash of the input. This does not replace a privacy or
+security review of the surrounding infrastructure.
 
 ## Data Schema Reference
 
-The API accepts 12 input fields derived from the Adult dataset. Protected attributes (`sex`, `race`, `income`) are intentionally excluded from the prediction input.
+The API accepts 12 fields derived from the Adult dataset. The example excludes
+`sex`, `race`, and `income` from prediction input.
 
 For full dataset documentation, see [Data Documentation](data.md).

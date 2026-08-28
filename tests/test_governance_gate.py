@@ -82,10 +82,12 @@ class TestCheckGate:
         result_custom = check_gate(report, thresholds)
         assert result_custom.passed is True
 
-    def test_missing_metrics_still_passes(self):
+    def test_missing_metrics_fail_closed(self):
         report = {"metadata": {}, "results": {"metrics": {}}}
         result = check_gate(report)
-        assert result.passed is True
+        assert result.passed is False
+        assert len(result.violations) == 4
+        assert all("missing required metric" in violation for violation in result.violations)
         assert result.metrics_checked == {}
 
     def test_metrics_checked_populated(self):

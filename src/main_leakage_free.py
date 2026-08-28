@@ -298,8 +298,8 @@ In the ORIGINAL implementation:
 In this LEAKAGE-FREE implementation:
 - EO thresholds are tuned using VALIDATION set labels only
 - TEST set labels are never seen during threshold selection
-- Results may show less dramatic fairness improvements, but they
-  are HONEST and GENERALIZABLE to new data
+- Results avoid threshold-selection leakage on this split, but this
+  experiment does not establish external validity or generalization
 """
     )
 

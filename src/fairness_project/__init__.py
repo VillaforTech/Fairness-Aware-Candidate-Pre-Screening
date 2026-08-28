@@ -1,3 +1,3 @@
-"""Fairness-aware candidate pre-screening system with bias mitigation."""
+"""Educational fairness evaluation project using the UCI Adult dataset."""
 
 __version__ = "0.1.0"

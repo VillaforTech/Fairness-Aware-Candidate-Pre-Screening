@@ -5,13 +5,15 @@
 ### Source
 
 The Adult dataset is from the UCI Machine Learning Repository:
-- **URL**: https://archive.ics.uci.edu/ml/datasets/adult
+
+- **URL**: <https://archive.ics.uci.edu/dataset/2/adult>
 - **Original source**: 1994 Census database
 - **Donated by**: Ronny Kohavi and Barry Becker (Silicon Graphics)
 
 ### License
 
-The UCI Machine Learning Repository datasets are available under:
+The Adult dataset page lists:
+
 - **License**: CC BY 4.0 (Creative Commons Attribution 4.0 International)
 - You are free to share and adapt the data for any purpose
 - Attribution required: Cite the UCI repository and original paper
@@ -20,14 +22,9 @@ The UCI Machine Learning Repository datasets are available under:
 
 If you use this dataset, please cite:
 
-```bibtex
-@misc{kohavi1996adult,
-  author = {Kohavi, Ronny},
-  title = {Scaling Up the Accuracy of Naive-Bayes Classifiers: A Decision-Tree Hybrid},
-  year = {1996},
-  publisher = {AAAI Press},
-  booktitle = {Proceedings of the Second International Conference on Knowledge Discovery and Data Mining}
-}
+```text
+Becker, B. & Kohavi, R. (1996). Adult [Dataset].
+UCI Machine Learning Repository. https://doi.org/10.24432/C5XW20
 ```
 
 ### Dataset Description
@@ -60,7 +57,9 @@ If you use this dataset, please cite:
 
 ### Sensitive Attributes
 
-For fairness analysis, we consider:
+The processed data retains these groupings. The documented leakage-free command
+computes and tunes its reported fairness metrics only for `sex`; a race analysis
+would need to be run and reported separately.
 
 1. **sex**: Binary (Male/Female)
    - Privileged group: Male
@@ -68,8 +67,7 @@ For fairness analysis, we consider:
 
 2. **race_binary**: Binary (White/Non-White)
    - Derived from original 'race' column
-   - Privileged group: White
-   - Unprivileged group: Non-White
+   - Available for separate analysis; not evaluated by the documented smoke run
 
 ### Data Processing
 
@@ -87,7 +85,7 @@ For fairness analysis, we consider:
 
 ### File Structure
 
-```
+```text
 data/
 ├── raw/adult/
 │   ├── adult.data      # Training data
@@ -138,28 +136,30 @@ The prediction API accepts 12 fields. Protected attributes (`sex`, `race`) and t
 
 **Training flow**:
 
-```
+```text
 UCI Repository → Download (raw/) → Preprocess (processed/) → Train/Val/Test Split
 → Feature Engineering (StandardScaler + OneHotEncoder) → Model Training
-→ Evaluation Report → Governance Gate → Model Registry (runs/)
+→ Test Evaluation → Prediction and Metric CSV Files
 ```
 
-**Inference flow**:
+**Intended API-scaffold flow**:
 
-```
+```text
 User Input → Pydantic Validation → DataFrame → Model.predict() → Response → Audit Log
 ```
 
-**Traceability**: Each training run produces a `run.json` file containing:
-- `run_id`: Unique identifier (timestamp-based)
-- `timestamp`: When the model was saved
-- `model_type`: Algorithm used (lr, rf, xgb)
-- `config_path`: Configuration file used
-- `git_commit`: Git commit hash at training time
+This flow is not currently runnable end to end with the tracked model artifact;
+see [API Scaffold and Operations Notes](deployment.md).
+
+The verified leakage-free script records CSV outputs but does not create a
+versioned model registry or run manifest. Record the commit, Python environment,
+seed, and command separately when reporting results.
 
 ### Ethical Considerations
 
-This dataset is used for **educational and research purposes** to study algorithmic fairness. When applying similar techniques to real hiring decisions:
+This dataset is used for **educational and research purposes** to study
+algorithmic fairness. These results do not justify use in real hiring decisions.
+A separate real-world project would require, at minimum:
 
 1. **Legal compliance**: Ensure compliance with employment discrimination laws
 2. **Stakeholder involvement**: Include affected communities in model development

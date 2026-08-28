@@ -182,14 +182,13 @@ def generate_model_card(run_meta: dict, metrics: dict) -> str:
     lines.append("")
     lines.append("- **Primary Use**: Educational demonstration of fairness-aware ML pipelines")
     lines.append("- **Intended Users**: ML researchers, students, practitioners")
-    lines.append(
-        "- **Out-of-Scope Uses**: Production hiring decisions without additional validation"
-    )
+    lines.append("- **Out-of-Scope Uses**: Employment screening or hiring decisions")
     lines.append("")
 
     lines.append("## Ethical Considerations")
     lines.append("")
-    lines.append("- **Protected Attributes**: sex, race")
+    lines.append("- **Reported Sensitive Attribute**: sex")
+    lines.append("- Race is retained in the data but requires a separate reported evaluation")
     lines.append("- **Mitigation Applied**: Equal Opportunity post-processing")
     lines.append("- Historical bias in training data (1994 Census)")
     lines.append("- Binary groupings may oversimplify demographic categories")

@@ -1,1 +1,1 @@
-"""Governance gates for fairness-aware model deployment."""
+"""Experimental policy checks for responsible-ML evaluation."""

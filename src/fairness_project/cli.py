@@ -1,7 +1,7 @@
 """
 Fairness Project CLI
 
-Command-line interface for the fairness-aware candidate pre-screening system.
+Command-line interface for the educational fairness evaluation project.
 
 Usage:
     fairness train --model {lr,rf,xgb} [--seed 42]
@@ -31,7 +31,7 @@ try:
     HAS_TYPER = True
     app = typer.Typer(
         name="fairness",
-        help="Fairness-aware candidate pre-screening CLI",
+        help="Educational fairness-evaluation CLI",
         add_completion=False,
     )
     data_app = typer.Typer(help="Data management commands")
@@ -307,7 +307,7 @@ if HAS_TYPER:
     def cli_callback(
         config: str = typer.Option(None, "--config", "-c", help="Path to YAML config file"),
     ) -> None:
-        """Fairness-aware candidate pre-screening CLI."""
+        """Educational fairness-evaluation CLI."""
         _load_config(config)
 
     @app.command()
@@ -406,7 +406,7 @@ def build_argparse_cli() -> argparse.ArgumentParser:
     """Build argparse CLI for when Typer is not available."""
     parser = argparse.ArgumentParser(
         prog="fairness",
-        description="Fairness-aware candidate pre-screening CLI",
+        description="Educational fairness-evaluation CLI",
     )
     parser.add_argument("--config", "-c", default=None, help="Path to YAML config file")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")

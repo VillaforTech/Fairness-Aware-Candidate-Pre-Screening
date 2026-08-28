@@ -1,11 +1,19 @@
 name: Documentation Checks
 
 on:
+  push:
+    branches: [main, master]
+    paths:
+      - "docs/**"
+      - "README.md"
+      - "src/**/*.py"
+      - ".github/**"
   pull_request:
     paths:
       - "docs/**"
       - "README.md"
       - "src/**/*.py"
+      - ".github/**"
 
 jobs:
   markdown-lint:

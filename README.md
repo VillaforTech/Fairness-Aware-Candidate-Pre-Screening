@@ -1,98 +1,69 @@
 # Fairness-Aware Candidate Pre-Screening
 
-A production-grade machine learning pipeline for fair candidate pre-screening with bias mitigation. This project demonstrates best practices for fairness-aware ML, including proper evaluation protocols, model persistence, and deployment interfaces.
+An educational responsible-ML evaluation project that studies group fairness,
+leakage-free threshold tuning, and local serving interfaces with the UCI Adult
+dataset.
 
 ## Overview
 
-This project investigates **fairness in an automated hiring pre-screening system** using the Adult (Census Income) dataset. We simulate a company that uses ML to identify candidates likely to have higher earning potential:
+This repository uses a hypothetical pre-screening scenario to make fairness
+trade-offs concrete. The underlying task is Adult-dataset income classification;
+the data contains census records, not job applications, and income is not a
+measure of job qualification.
 
-- Candidates predicted `>50K` are **fast-tracked for interviews**
-- Candidates predicted `<=50K` are **deprioritized**
+It implements baseline models and Equal Opportunity (EO) post-processing, then
+compares performance and group-fairness metrics on a held-out test set.
 
-If the model systematically underestimates certain groups, this creates unfair barriers to opportunity.
+> **Not for hiring decisions.** This is a course/research artifact, not a
+> validated employment-selection system. Passing its configurable checks does
+> not establish legal compliance, ethical acceptability, or real-world safety.
 
 ## Key Features
 
-- **Leakage-free evaluation**: EO thresholds tuned on validation, evaluated on test
+- **Leakage-free evaluation**: EO thresholds tuned on validation and evaluated
+  on test
 - **Multiple fairness metrics**: SPD, DI, TPR Gap, Equalized Odds
-- **Model registry**: Save, load, and manage trained models
-- **CLI interface**: Easy-to-use command-line tools
-- **API deployment**: FastAPI with Docker support
-- **Drift monitoring**: Track data and fairness drift over time
+- **Reproducible artifacts**: Per-model prediction and metric CSV outputs
+- **Data CLI**: Repeatable preprocessing command used by the quick start
+- **Experimental policy check**: Fail-closed threshold checks for compatible
+  JSON reports
+- **API scaffold**: Versioned FastAPI routes covered by mock-based tests
+- **Drift utilities**: Experimental data- and fairness-drift checks
 
 ## Quick Start
 
 ### Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/VillafuerTech/fairness-project.git
-cd fairness-project
+git clone \
+  https://github.com/VillaforTech/Fairness-Aware-Candidate-Pre-Screening.git
+cd Fairness-Aware-Candidate-Pre-Screening
 
-# Install the package
-pip install -e "."
-
-# For development
-pip install -e ".[dev]"
-
-# For API deployment
-pip install -e ".[api]"
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev,api]"
 ```
+
+The automated test matrix covers Python 3.10, 3.11, and 3.12.
 
 ### Run the Pipeline
 
 ```bash
-# Set PYTHONPATH (required for legacy scripts)
-export PYTHONPATH=src:.
-
-# Run the unified pipeline (baseline + EO post-processing)
-python src/main.py
-
-# Or run with specific step
-python src/main.py --step 1        # Baseline only
-python src/main.py --step 2        # EO post-processing only
-python src/main.py --step all      # Both (default)
-
-# Run leakage-free evaluation (recommended)
-python src/main_leakage_free.py
-```
-
-### CLI Commands
-
-```bash
-# Using the CLI (requires pip install -e .)
-PYTHONPATH=src python -m fairness_project.cli train --model xgb --seed 42
-PYTHONPATH=src python -m fairness_project.cli evaluate
-PYTHONPATH=src python -m fairness_project.cli mitigate eo --sensitive sex
-PYTHONPATH=src python -m fairness_project.cli plot
-```
-
-### Developer Workflow
-
-The recommended CLI-first pipeline from data to deployment:
-
-```bash
-# 1. Download and preprocess data
-fairness data download
+# Build the model-ready dataset from the bundled UCI files
 fairness data preprocess
 
-# 2. Train a model
-fairness train --model xgb --seed 42
+# Tune EO thresholds on validation data and evaluate once on test data
+PYTHONPATH=src:. python src/main_leakage_free.py --seed 42
 
-# 3. Evaluate performance and fairness
-fairness evaluate
-
-# 4. Run governance gate (pass required before deployment)
-python -m fairness_project.governance.gate --report data/metrics/report.json
-
-# 5. Deploy the API
-MODEL_PATH=models/model.joblib uvicorn fairness_project.inference.api:app --port 8000
+# Run the automated checks
+pytest tests/ -q
 ```
 
 ## Project Structure
 
-```
-fairness-project/
+```text
+Fairness-Aware-Candidate-Pre-Screening/
 ├── pyproject.toml                 # Package configuration (PEP 621)
 ├── configs/
 │   └── default.yaml               # Default configuration
@@ -119,7 +90,6 @@ fairness-project/
 │       ├── config.py              # Configuration system
 │       ├── data/                  # Data download/preprocess
 │       ├── features/              # Feature engineering
-│       ├── models/                # Model training & registry
 │       ├── metrics/               # Performance & fairness
 │       ├── fairness/              # Mitigation techniques
 │       ├── evaluation/            # Evaluation & reporting
@@ -142,11 +112,8 @@ flowchart LR
     C --> D[Train/Val/Test Split]
     D --> E[Feature Engineering]
     E --> F[Train Model]
-    F --> G[Governance Gate]
-    G -->|Pass| H[Model Registry]
-    H --> I[REST API]
-    I --> J[Monitoring]
-    J -->|Drift detected| F
+    F --> G[Test Evaluation]
+    G --> H[Metrics and Predictions]
 ```
 
 ### Fairness Pipeline
@@ -157,16 +124,15 @@ flowchart LR
     B --> C[EO Tuning\nval set only]
     C --> D[Apply Thresholds]
     D --> E[Test Evaluation]
-    E --> F[Governance Gate]
-    F -->|Pass| G[Deploy]
-    F -->|Fail| H[Retrain / Adjust]
+    E --> F[Compare Metrics]
 ```
 
 ## Evaluation Protocol
 
 ### Leakage-Free EO Tuning
 
-The Equal Opportunity post-processing requires threshold tuning. To prevent test set leakage:
+The Equal Opportunity post-processing requires threshold tuning. To prevent
+test-set leakage:
 
 1. **Split data**: Train / Validation (15%) / Test
 2. **Train model**: On training set only
@@ -192,66 +158,52 @@ y_pred_test = evaluator.apply_to_test(y_proba_test, sensitive_test)
 
 ## Results
 
+The following values were reproduced on 2026-08-28 with Python 3.11 and seed 42
+using the documented leakage-free command. They describe this dataset and split;
+they are not estimates of hiring validity or real-world impact.
+
 ### Before EO Post-Processing
 
 | Model | Accuracy | SPD | DI | TPR Gap |
 |-------|----------|-----|-----|---------|
-| LR | 0.847 | 0.175 | 0.321 | 0.070 |
-| RF | 0.845 | 0.181 | 0.339 | 0.066 |
-| XGB | 0.862 | 0.170 | 0.345 | 0.065 |
+| LR | 0.8477 | 0.1764 | 0.3180 | 0.0713 |
+| RF | 0.8441 | 0.1790 | 0.3415 | 0.0691 |
+| XGB | 0.8687 | 0.1760 | 0.3418 | 0.0584 |
 
 ### After EO Post-Processing (Leakage-Free)
 
 | Model | Accuracy | SPD | DI | TPR Gap |
 |-------|----------|-----|-----|---------|
-| LR | 0.846 | 0.150 | 0.417 | -0.020 |
-| RF | 0.843 | 0.152 | 0.441 | -0.038 |
-| XGB | 0.859 | 0.158 | 0.455 | -0.015 |
+| LR | 0.8471 | 0.1668 | 0.3550 | 0.0372 |
+| RF | 0.8442 | 0.1731 | 0.3632 | 0.0421 |
+| XGB | 0.8691 | 0.1666 | 0.3768 | 0.0117 |
 
-## API Deployment
+All three EO-adjusted runs fail the default policy gate on disparate impact and
+statistical parity. For example, XGBoost has `DI=0.3768` (required: at least
+`0.80`) and `SPD=0.1666` (required absolute value: at most `0.10`). A lower TPR
+gap does not make the model acceptable for use.
 
-### Using Docker
+## Experimental Policy Check
+
+The repository also includes a fail-closed threshold checker for compatible
+JSON reports. CI tests that checker with fixed passing and failing fixtures. The
+documented leakage-free pipeline does not currently create that JSON report or
+invoke the checker automatically, so it is a separate experimental capability.
+
+## API Scaffold Status
+
+The request schemas, health endpoint, and prediction routes are covered by tests
+that inject mock models. The bundled XGBoost artifact is **not compatible** with
+the current 12-field API schema, so end-to-end prediction serving is not a
+verified capability. The Docker files are retained as development scaffolding.
 
 ```bash
-# Build and run
-docker build -t fairness-api .
-docker run -p 8000:8000 -v ./models:/app/models fairness-api
-
-# Or with docker-compose
-docker-compose up
+pytest tests/test_api.py -q
 ```
 
-### API Endpoints
-
-Interactive API docs are available at [`/docs`](http://localhost:8000/docs) (Swagger UI) and [`/redoc`](http://localhost:8000/redoc) (ReDoc).
-
-```bash
-# Health check
-curl http://localhost:8000/health
-
-# Model metadata and fairness metrics
-curl http://localhost:8000/v1/metadata
-
-# Single prediction
-curl -X POST http://localhost:8000/v1/predict \
-  -H "Content-Type: application/json" \
-  -d '{
-    "age": 35,
-    "workclass": "Private",
-    "fnlwgt": 200000,
-    "education": "Bachelors",
-    "education_num": 13,
-    "marital_status": "Married-civ-spouse",
-    "occupation": "Exec-managerial",
-    "relationship": "Husband",
-    "native_country": "United-States",
-    "capital_gain": 5000,
-    "capital_loss": 0,
-    "hours_per_week": 40
-  }'
-```
-
-For the complete API reference, see [API Specification](docs/api_spec.md). For integration examples in Python, see the [API Integration notebook](notebooks/5_API_Integration_Examples.ipynb).
+The intended interface contract is recorded in the
+[API Specification](docs/api_spec.md), but it should not be treated as a working
+deployment guide until a compatible artifact and an end-to-end test are added.
 
 ## Configuration
 
@@ -268,26 +220,32 @@ fairness:
   eo_base_threshold: 0.5
 ```
 
+The documented smoke run evaluates `sex`; `race_binary` is available in the
+processed data but is not reported by that command.
+
 ## Testing
 
 ```bash
-# Run tests (requires pytest)
-pip install pytest
-PYTHONPATH=src pytest tests/ -v
+pytest tests/ -q
+ruff check src/ tests/
+ruff format --check src/ tests/
 ```
 
 ## Documentation
 
-- [Data Documentation](docs/data.md) - Dataset details, licensing, and API input schema
+- [Data Documentation](docs/data.md) - Dataset details, licensing, and API schema
 - [API Specification](docs/api_spec.md) - Complete REST API reference
-- [Governance Gate](docs/governance.md) - Pre-deployment fairness checks
-- [Deployment Guide](docs/deployment.md) - Deployment and operations manual
+- [Governance Gate](docs/governance.md) - Experimental threshold checks
+- [Serving Notes](docs/deployment.md) - API scaffold and unresolved limitations
 - [Responsible AI Protocol](docs/responsible_ai.md) - Fairness guidelines
 - [Model Card](docs/model_card.md) - Model specifications
 
 ## License
 
-MIT License
+No software license is currently included. Permission to use, modify, or
+redistribute this repository's code has not been granted. The bundled UCI Adult
+dataset is separately available under CC BY 4.0; see the
+[data documentation](docs/data.md) for attribution details.
 
 ## Citation
 
@@ -296,9 +254,9 @@ If using this project, please cite:
 ```bibtex
 @misc{fairness-project,
   title={Fairness-Aware Candidate Pre-Screening},
-  author={VillafuerTech},
-  year={2024},
-  url={https://github.com/VillafuerTech/fairness-project}
+  author={VillaforTech},
+  year={2025},
+  url={https://github.com/VillaforTech/Fairness-Aware-Candidate-Pre-Screening}
 }
 ```
 

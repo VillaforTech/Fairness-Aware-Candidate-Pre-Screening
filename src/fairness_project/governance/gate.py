@@ -1,5 +1,5 @@
 """
-Governance gate for automated deployment decisions.
+Experimental policy gate for evaluation reports.
 
 Validates evaluation reports against configurable fairness and performance thresholds.
 
@@ -84,6 +84,11 @@ def check_gate(
     # Extract metrics from report structure
     results = report.get("results", {})
     metrics = results.get("metrics", {})
+
+    required_metrics = ("accuracy", "TPR_gap", "DI", "SPD")
+    for metric in required_metrics:
+        if metrics.get(metric) is None:
+            violations.append(f"missing required metric: {metric}")
 
     # Check accuracy
     accuracy = metrics.get("accuracy")
