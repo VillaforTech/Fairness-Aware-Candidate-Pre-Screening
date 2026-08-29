@@ -92,13 +92,13 @@ def generate_model_card(manifest: dict[str, Any], report: dict[str, Any]) -> str
                 f"| {metric} | {float(interval['lower']):.4f} | {float(interval['upper']):.4f} |"
             )
 
-    verdict = "PASSED" if governance["passed"] else "FAILED"
+    verdict = "passed" if governance["passed"] else "rejected"
     lines.extend(
         [
             "",
             "## Experimental policy gate",
             "",
-            f"**{verdict}**",
+            f"### Verdict: {verdict}",
             "",
         ]
     )

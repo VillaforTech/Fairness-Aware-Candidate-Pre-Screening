@@ -46,7 +46,7 @@
 
 ## Experimental policy gate
 
-**FAILED**
+### Verdict: rejected
 
 - DI=0.4120 < min_disparate_impact=0.8
 - |SPD|=0.1563 > max_spd=0.1
