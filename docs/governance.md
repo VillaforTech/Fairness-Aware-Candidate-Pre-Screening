@@ -1,184 +1,120 @@
-# Governance Gate Documentation
+# Experimental policy gate
 
-## Overview
+The gate is a strict parser plus a set of configurable experiment checks. It is
+not a deployment approval, legal test, or ethical certification.
 
-This project demonstrates **governance as code** with automated checks against
-configurable fairness and performance thresholds. The gate is an experimental
-policy check, not evidence that a model is safe, lawful, or suitable for use.
+## Default checks
 
-## Default Thresholds
+| Check | Default |
+|---|---:|
+| Adjusted accuracy | at least 0.80 |
+| Accuracy drop from baseline | at most 0.02 |
+| Absolute TPR gap | at most 0.05 |
+| Disparate impact | 0.80 to 1.25 |
+| Absolute SPD | at most 0.10 |
 
-The default thresholds are defined in `GateThresholds` (`src/fairness_project/governance/gate.py`):
+The DI interval is two-sided so reverse disparity is not treated as unlimited
+success. Accuracy loss is computed from baseline and adjusted metrics in the
+same report.
 
-| Threshold | Default Value | Description |
-|-----------|---------------|-------------|
-| `min_accuracy` | 0.80 | Minimum acceptable accuracy |
-| `max_tpr_gap` | 0.05 | Maximum absolute TPR gap between groups |
-| `min_disparate_impact` | 0.80 | Minimum disparate impact ratio (4/5ths rule) |
-| `max_spd` | 0.10 | Maximum absolute statistical parity difference |
+## Fail-closed report contract
 
-## Workflow
+Schema `1.0` requires:
 
-```mermaid
-flowchart LR
-    A[Train Model] --> B[Generate Report]
-    B --> C{Governance Gate}
-    C -->|Pass| D[Eligible for Further Review]
-    C -->|Fail| E[Flag Experiment]
-    E --> F[Triage & Fix]
-    F --> A
-```
+- a nonempty string `run_id`
+- a non-Boolean, nonnegative integer `seed`
+- `model_type` equal to `lr`, `rf`, or `xgb`
+- a full lowercase 40-hex Git commit and Boolean dirty state when executed from
+  a checkout, or the explicit pair `"unavailable"` / `null` for an installed
+  distribution
+- 64-hex SHA-256 fingerprints for the input data and canonical package source
+- baseline accuracy
+- adjusted accuracy, TPR gap, DI, and SPD
 
-## CLI Usage
-
-```bash
-# Basic usage
-python -m fairness_project.governance.gate --report path/to/report.json
-
-# With custom thresholds
-python -m fairness_project.governance.gate \
-  --report path/to/report.json \
-  --min-accuracy 0.85 \
-  --max-tpr-gap 0.03 \
-  --min-di 0.85 \
-  --max-spd 0.08
-```
-
-**Exit codes**:
-
-- `0`: The supplied metrics passed the configured thresholds
-- `1`: Gate failed, one or more violations detected
-
-## Programmatic Usage
-
-```python
-from fairness_project.governance.gate import check_gate, GateThresholds
-
-report = {
-    "metadata": {"run_id": "20240115_143022"},
-    "results": {
-        "metrics": {
-            "accuracy": 0.85,
-            "TPR_gap": 0.03,
-            "DI": 0.90,
-            "SPD": 0.05
-        }
-    }
-}
-
-# Check with default thresholds
-result = check_gate(report)
-print(f"Passed: {result.passed}")
-print(f"Violations: {result.violations}")
-
-# Check with custom thresholds
-custom = GateThresholds(min_accuracy=0.85, max_tpr_gap=0.03)
-result = check_gate(report, thresholds=custom)
-```
-
-## Output Format
-
-**Passing gate**:
-
-```text
-Governance Gate: PASSED
-Metrics checked: {
-  "accuracy": 0.85,
-  "TPR_gap": 0.03,
-  "DI": 0.90,
-  "SPD": 0.05
-}
-```
-
-**Failing gate**:
-
-```text
-Governance Gate: FAILED
-Metrics checked: {
-  "accuracy": 0.50,
-  "TPR_gap": 0.20,
-  "DI": 0.40,
-  "SPD": 0.30
-}
-Violations:
-  - accuracy=0.5000 < min_accuracy=0.8
-  - |TPR_gap|=0.2000 > max_tpr_gap=0.05
-  - DI=0.4000 < min_disparate_impact=0.8
-  - |SPD|=0.3000 > max_spd=0.1
-```
-
-## CI Integration
-
-The governance-gate job in `.github/workflows/ci.yml` creates fixed passing and
-failing JSON fixtures, then checks that the CLI accepts and rejects them as
-expected.
-
-This verifies the threshold-checking code. The job does not train a model,
-generate a live evaluation report, or approve an artifact for use.
-
-## Report Format
-
-The governance gate expects a JSON report with this structure. The
-`evaluation.report.generate_json_report` helper can produce it, but the
-documented leakage-free pipeline does not currently call that helper.
+Required metrics must be finite numbers in their possible domains. The gate
+rejects `null`, strings, Booleans, NaN, infinity, impossible values, missing
+objects, and unsupported schema versions.
 
 ```json
 {
+  "schema_version": "1.0",
   "metadata": {
-    "run_id": "20240115_143022",
-    "timestamp": "2024-01-15T14:30:22",
+    "run_id": "xgb-seed-42",
     "seed": 42,
-    "model_type": "xgb"
+    "model_type": "xgb",
+    "git_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "dirty_worktree": false,
+    "data_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "source_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
   },
   "results": {
-    "metrics": {
-      "accuracy": 0.85,
-      "precision": 0.75,
-      "recall": 0.65,
-      "f1": 0.70,
-      "SPD": 0.05,
-      "DI": 0.90,
-      "TPR_gap": 0.03
+    "baseline_metrics": {
+      "accuracy": 0.8694
     },
-    "thresholds": {
-      "privileged": 0.45,
-      "unprivileged": 0.55
+    "metrics": {
+      "accuracy": 0.8678,
+      "TPR_gap": -0.0124,
+      "DI": 0.4120,
+      "SPD": 0.1563
     }
   }
 }
 ```
 
-The gate requires `accuracy`, `TPR_gap`, `DI`, and `SPD` under
-`results.metrics`. It fails closed if any required metric is missing.
+The canonical `fairness audit` command writes the complete schema, including
+protocol, group cells, thresholds, uncertainty, and the recorded verdict.
+The source fingerprint hashes the installed `fairness_project` package itself,
+so it is nonempty and stable both inside a checkout and from a wheel. Git
+commands are anchored to that package's owning checkout and never run against
+the caller's current directory.
 
-## Escalation Process
+## Commands and exit codes
 
-When the governance gate fails:
-
-1. **Triage**: Review the specific violations in the gate output
-2. **Diagnose**: Determine if the issue is in training data, model configuration, or thresholds
-3. **Fix options**:
-   - **Retrain**: Adjust model hyperparameters or training data
-   - **Revise the experiment**: Change thresholds only as an explicit,
-     documented experimental configuration
-4. **Document**: Record the decision and rationale in the run metadata
-
-## Current CI Verification Sequence
-
-```mermaid
-sequenceDiagram
-    participant Dev as Developer
-    participant CI as CI Pipeline
-    participant Gate as Governance Gate
-
-    Dev->>CI: Push code
-    CI->>CI: Run unit tests
-    CI->>CI: Create fixed pass/fail fixtures
-    CI->>Gate: Submit fixture reports
-    Gate-->>CI: Accept pass fixture
-    Gate-->>CI: Reject fail fixture
+```bash
+uv run fairness gate --report runs/xgb-seed-42/report.json
 ```
 
-Connecting a freshly trained model to this check would require an explicit
-report-generation step plus provenance and review controls that are not yet
-implemented.
+- `0`: valid report, configured checks passed
+- `1`: valid report, at least one configured check failed
+- `2`: unreadable/malformed report or invalid threshold configuration
+
+Structural validation happens before policy evaluation. Consequently, a bad
+digest, unsupported model type, Boolean seed, missing metric, or impossible
+metric value is an input error (`2`), not evidence that a valid model report
+missed a policy threshold (`1`). Programmatic callers can distinguish the two
+using `GateResult.report_valid` or `GateResult.exit_code` while continuing to
+use `check_gate(report)` as before.
+
+Advanced threshold overrides remain available on the module CLI:
+
+```bash
+uv run python -m fairness_project.governance.gate \
+  --report runs/xgb-seed-42/report.json \
+  --min-accuracy 0.85 \
+  --max-accuracy-drop 0.01 \
+  --max-tpr-gap 0.03 \
+  --min-di 0.85 \
+  --max-di 1.18 \
+  --max-spd 0.08
+```
+
+An override changes an experiment criterion. It does not make a failing model
+safe or compliant.
+
+## CI behavior
+
+CI rebuilds the model-ready data from the bundled UCI files, trains Logistic
+Regression through the same leakage-free path, generates a real report, and
+requires the default gate to reject its DI/SPD result. This tests report
+generation and policy wiring together; fixed unit fixtures separately exercise
+pass, fail, malformed, and non-finite cases.
+
+## Interpretation
+
+The reference XGBoost run improves TPR gap, DI, and SPD while losing 0.0016
+accuracy. It still fails DI and SPD. That is the intended outcome of the gate:
+preserve the whole trade-off and block a one-metric success story.
+
+Passing would mean only that these configured numeric checks passed on this
+dataset and split. It would not establish construct validity, external validity,
+job relatedness, legality, privacy, security, or accountable operation.

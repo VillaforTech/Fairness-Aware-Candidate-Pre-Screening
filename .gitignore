@@ -67,7 +67,7 @@ optuna.sqlite3
 *.db-journal
 
 # Model artifacts
-models/
+/models/
 checkpoints/
 *.pt
 *.pth
@@ -83,6 +83,7 @@ data/*
 # ...but keep the *starting point* data in data/raw/
 !data/raw/
 !data/raw/**
+data/raw/**/.DS_Store
 
 # Optionally keep helpful docs about data
 !data/README.md
@@ -117,3 +118,7 @@ Desktop.ini
 data/predictions/
 data/metrics/
 data/plots/
+
+# Reference reports are committed as evidence snapshots, not loadable bundles.
+/reports/reference/**/manifest.json
+/reports/reference/**/policy.json

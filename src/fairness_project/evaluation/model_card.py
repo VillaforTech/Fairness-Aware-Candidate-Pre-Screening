@@ -1,241 +1,153 @@
-"""
-Generate a model card with live metrics from a specific run.
-
-Usage:
-    python -m fairness_project.evaluation.model_card --run-id <run_id>
-    python -m fairness_project.evaluation.model_card --run-id <run_id> --output docs/model_card.md
-"""
+"""Render a model card from the same report consumed by the policy gate."""
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
+from typing import Any
+
+from fairness_project.models.artifact import load_bundle
 
 
-def load_run_data(run_id: str) -> tuple[dict, dict]:
-    """Load run.json and metrics.json for a given run ID.
-
-    Parameters
-    ----------
-    run_id : str
-        The run identifier (directory name under runs/).
-
-    Returns
-    -------
-    tuple[dict, dict]
-        (run_metadata, metrics) dictionaries.
-    """
-    run_dir = Path("runs") / run_id
-
-    run_path = run_dir / "run.json"
-    if not run_path.exists():
-        raise FileNotFoundError(f"run.json not found at {run_path}")
-
-    metrics_path = run_dir / "metrics.json"
-    if not metrics_path.exists():
-        raise FileNotFoundError(f"metrics.json not found at {metrics_path}")
-
-    with open(run_path) as f:
-        run_meta = json.load(f)
-    with open(metrics_path) as f:
-        metrics = json.load(f)
-
-    return run_meta, metrics
+def load_run_data(
+    run_id: str,
+    runs_dir: str | Path = "runs",
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    bundle = load_bundle(Path(runs_dir) / run_id)
+    return bundle.manifest, bundle.report
 
 
-def generate_model_card(run_meta: dict, metrics: dict) -> str:
-    """Generate a Markdown model card from run metadata and metrics.
-
-    Parameters
-    ----------
-    run_meta : dict
-        Run metadata from run.json.
-    metrics : dict
-        Evaluation metrics from metrics.json.
-
-    Returns
-    -------
-    str
-        Model card as Markdown string.
-    """
-    from fairness_project.governance.gate import GateThresholds, check_gate
-
-    run_id = run_meta.get("run_id", "unknown")
-    timestamp = run_meta.get("timestamp") or run_meta.get("saved_at", "unknown")
-    model_type = run_meta.get("model_type", "unknown")
-
-    baseline = metrics.get("baseline", {})
-    eo_adjusted = metrics.get("eo_adjusted", {})
-
-    # Build a report structure for the governance gate
-    report = {"results": {"metrics": eo_adjusted}}
-    thresholds = GateThresholds()
-    gate_result = check_gate(report, thresholds)
-
-    lines = []
-
-    # Header
-    lines.append("# Model Card: Fairness-Aware Candidate Pre-Screening")
-    lines.append("")
-    lines.append(f"> **Auto-generated** from run `{run_id}` at {timestamp}")
-    lines.append(">")
-    lines.append("> To regenerate with live metrics:")
-    lines.append("> ```bash")
-    lines.append(f"> python -m fairness_project.evaluation.model_card --run-id {run_id}")
-    lines.append("> ```")
-    lines.append("")
-
-    # Model Details
-    lines.append("## Model Details")
-    lines.append("")
-    lines.append(f"- **Run ID**: `{run_id}`")
-    lines.append(f"- **Model Type**: {model_type}")
-    lines.append(f"- **Trained At**: {timestamp}")
-    lines.append("- **Framework**: scikit-learn, XGBoost")
-    lines.append("")
-
-    # Performance Metrics
-    lines.append("## Performance Metrics")
-    lines.append("")
-    lines.append("| Metric | Baseline | EO-Adjusted | Change |")
-    lines.append("|--------|----------|-------------|--------|")
-
-    for metric in ("accuracy", "precision", "recall", "f1"):
-        base_val = baseline.get(metric, 0)
-        eo_val = eo_adjusted.get(metric, 0)
-        change = eo_val - base_val
-        lines.append(f"| {metric.capitalize()} | {base_val:.4f} | {eo_val:.4f} | {change:+.4f} |")
-
-    lines.append("")
-
-    # Fairness Metrics
-    lines.append("## Fairness Metrics")
-    lines.append("")
-    lines.append("| Metric | Baseline | EO-Adjusted | Target |")
-    lines.append("|--------|----------|-------------|--------|")
-
-    fairness_targets = {
-        "SPD": f"|SPD| <= {thresholds.max_spd}",
-        "DI": f"DI >= {thresholds.min_disparate_impact}",
-        "TPR_gap": f"|gap| <= {thresholds.max_tpr_gap}",
-    }
-
-    for key, target in fairness_targets.items():
-        base_val = baseline.get(key, 0)
-        eo_val = eo_adjusted.get(key, 0)
-        lines.append(f"| {key} | {base_val:.4f} | {eo_val:.4f} | {target} |")
-
-    lines.append("")
-
-    # Governance Gate Status
-    lines.append("## Governance Gate Status")
-    lines.append("")
-    status = "PASSED" if gate_result.passed else "FAILED"
-    lines.append(f"**Overall**: {status}")
-    lines.append("")
-    lines.append("| Check | Value | Threshold | Status |")
-    lines.append("|-------|-------|-----------|--------|")
-
-    checks = [
+def generate_model_card(manifest: dict[str, Any], report: dict[str, Any]) -> str:
+    metadata = report["metadata"]
+    protocol = report["protocol"]
+    results = report["results"]
+    baseline = results["baseline_metrics"]
+    adjusted = results["metrics"]
+    thresholds = results["thresholds"]
+    split_counts = protocol["split_counts"]
+    uncertainty = results.get("uncertainty", {})
+    adjusted_intervals = uncertainty.get("intervals", {}).get("adjusted", {})
+    governance = report["governance"]
+    dirty_state = manifest["dirty_worktree"]
+    dirty_label = "unavailable (installed distribution)" if dirty_state is None else dirty_state
+    lines = [
+        "# Model Card: UCI Adult Fairness Audit",
+        "",
+        f"> Generated from validated run `{manifest['run_id']}`.",
+        "> This is a benchmark evaluation artifact, not a hiring model.",
+        "",
+        "## Provenance",
+        "",
+        f"- Model: `{manifest['model_type']}`",
+        f"- Created: {manifest['created_at']}",
+        f"- Git commit: `{manifest['git_commit']}`",
+        f"- Data SHA-256: `{manifest['data_sha256']}`",
+        f"- Source SHA-256: `{manifest['source_sha256']}`",
+        f"- Seed: {metadata['seed']}",
+        f"- Dirty worktree recorded: {dirty_label}",
+        "",
+        "## Evaluation protocol",
+        "",
+        f"- Dataset: {protocol['dataset']}",
+        f"- Validation: {protocol['validation_strategy']}",
         (
-            "Accuracy",
-            eo_adjusted.get("accuracy"),
-            f">= {thresholds.min_accuracy}",
-            thresholds.min_accuracy,
+            "- Rows: "
+            f"{split_counts['train']:,} fit / {split_counts['val']:,} validation / "
+            f"{split_counts['test']:,} test"
         ),
+        "- EO thresholds were tuned on validation labels only.",
+        "- Final metrics were computed once on the preserved official test partition.",
+        "- Protected attributes were excluded from model features.",
         (
-            "|TPR Gap|",
-            abs(eo_adjusted.get("TPR_gap", 0)),
-            f"<= {thresholds.max_tpr_gap}",
-            thresholds.max_tpr_gap,
+            "- Frozen offline thresholds: "
+            f"Male `{float(thresholds['privileged']):.3f}`, "
+            f"Female `{float(thresholds['unprivileged']):.3f}`."
         ),
-        (
-            "Disparate Impact",
-            eo_adjusted.get("DI"),
-            f">= {thresholds.min_disparate_impact}",
-            thresholds.min_disparate_impact,
-        ),
-        ("|SPD|", abs(eo_adjusted.get("SPD", 0)), f"<= {thresholds.max_spd}", thresholds.max_spd),
+        "",
+        "## Results",
+        "",
+        "| Metric | Baseline | Offline adjusted | Change |",
+        "|---|---:|---:|---:|",
     ]
+    for metric in ("accuracy", "precision", "recall", "f1", "SPD", "DI", "TPR_gap"):
+        before = float(baseline[metric])
+        after = float(adjusted[metric])
+        lines.append(f"| {metric} | {before:.4f} | {after:.4f} | {after - before:+.4f} |")
 
-    for label, value, threshold_str, threshold_val in checks:
-        if value is None:
-            lines.append(f"| {label} | N/A | {threshold_str} | -- |")
-            continue
-        if label.startswith("|"):
-            passed = value <= threshold_val
-        elif "Accuracy" in label:
-            passed = value >= threshold_val
-        elif "Disparate" in label:
-            passed = value >= threshold_val
-        else:
-            passed = value <= threshold_val
-        mark = "PASS" if passed else "FAIL"
-        lines.append(f"| {label} | {value:.4f} | {threshold_str} | {mark} |")
+    if adjusted_intervals:
+        confidence = float(uncertainty["confidence"]) * 100
+        lines.extend(
+            [
+                "",
+                f"### Adjusted {confidence:.0f}% paired-bootstrap intervals",
+                "",
+                "| Metric | Lower | Upper |",
+                "|---|---:|---:|",
+            ]
+        )
+        for metric in ("accuracy", "SPD", "DI", "TPR_gap"):
+            interval = adjusted_intervals[metric]
+            lines.append(
+                f"| {metric} | {float(interval['lower']):.4f} | {float(interval['upper']):.4f} |"
+            )
 
-    lines.append("")
+    verdict = "PASSED" if governance["passed"] else "FAILED"
+    lines.extend(
+        [
+            "",
+            "## Experimental policy gate",
+            "",
+            f"**{verdict}**",
+            "",
+        ]
+    )
+    if governance["violations"]:
+        lines.extend(f"- {violation}" for violation in governance["violations"])
+    else:
+        lines.append("- No configured threshold violations.")
 
-    # Standard sections
-    lines.append("## Intended Use")
-    lines.append("")
-    lines.append("- **Primary Use**: Educational demonstration of fairness-aware ML pipelines")
-    lines.append("- **Intended Users**: ML researchers, students, practitioners")
-    lines.append("- **Out-of-Scope Uses**: Employment screening or hiring decisions")
-    lines.append("")
-
-    lines.append("## Ethical Considerations")
-    lines.append("")
-    lines.append("- **Reported Sensitive Attribute**: sex")
-    lines.append("- Race is retained in the data but requires a separate reported evaluation")
-    lines.append("- **Mitigation Applied**: Equal Opportunity post-processing")
-    lines.append("- Historical bias in training data (1994 Census)")
-    lines.append("- Binary groupings may oversimplify demographic categories")
-    lines.append("")
-
-    lines.append("## Evaluation Protocol")
-    lines.append("")
-    lines.append("- **Split**: Train / Validation (15% of train) / Test")
-    lines.append("- **Leakage Prevention**: EO thresholds tuned on validation only")
-    lines.append("- **Reporting**: Final metrics computed on held-out test set")
-    lines.append("")
-
+    lines.extend(
+        [
+            "",
+            "## Serving boundary",
+            "",
+            "The local API serves the baseline global threshold only. It does not apply the",
+            "offline sex-specific thresholds. API responses name the policy and artifact ID",
+            "so the offline fairness experiment cannot be mistaken for deployed behavior.",
+            "",
+            "## Limitations",
+            "",
+            "- Adult is a 1994 census-income dataset, not applicant or job-performance data.",
+            "- Binary sex and race groupings erase identity and intersectional detail.",
+            "- Bootstrap intervals describe test-sample uncertainty, not external validity.",
+            "- Passing a configurable gate would not establish safety, legality, or validity.",
+            "",
+            "## Authors",
+            "",
+            "Roberto Villafuerte and Charles Santhakumar, University of Helsinki collaboration.",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for model card generation."""
-    parser = argparse.ArgumentParser(
-        description="Generate a model card with live metrics from a specific run",
-    )
-    parser.add_argument(
-        "--run-id",
-        required=True,
-        help="Run identifier (directory name under runs/)",
-    )
-    parser.add_argument(
-        "--output",
-        default="docs/model_card.md",
-        help="Output path for the model card (default: docs/model_card.md)",
-    )
-
+    parser = argparse.ArgumentParser(description="Generate a model card from a run bundle")
+    parser.add_argument("--run-id", required=True)
+    parser.add_argument("--runs-dir", default="runs")
+    parser.add_argument("--output", default="docs/model_card.md")
     args = parser.parse_args(argv)
-
     try:
-        run_meta, metrics = load_run_data(args.run_id)
-    except FileNotFoundError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        manifest, report = load_run_data(args.run_id, args.runs_dir)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
         return 1
 
-    content = generate_model_card(run_meta, metrics)
-
-    output_path = Path(args.output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
-        f.write(content)
-
-    print(f"Model card generated at: {output_path}")
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(generate_model_card(manifest, report), encoding="utf-8")
+    print(f"Model card generated at: {output}")
     return 0
 
 

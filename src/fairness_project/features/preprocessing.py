@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pandas as pd
+from pandas.api.types import is_numeric_dtype
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -41,8 +42,8 @@ def build_preprocessing_pipeline(
         exclude_cols = EXCLUDE_COLUMNS
 
     # Identify column types
-    numeric_cols = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
-    categorical_cols = df.select_dtypes(include=["object"]).columns.tolist()
+    numeric_cols = [column for column in df.columns if is_numeric_dtype(df[column])]
+    categorical_cols = [column for column in df.columns if column not in numeric_cols]
 
     # Remove excluded columns
     for col in exclude_cols:

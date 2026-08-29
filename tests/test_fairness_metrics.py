@@ -8,7 +8,7 @@ class TestDemographicParity:
 
     def test_equal_rates(self):
         """Test with equal positive rates."""
-        from src.metrics.fairness import demographic_parity
+        from fairness_project.metrics.fairness import demographic_parity
 
         y_pred = np.array([1, 1, 0, 0, 1, 1, 0, 0])
         sensitive = np.array(["A", "A", "A", "A", "B", "B", "B", "B"])
@@ -20,7 +20,7 @@ class TestDemographicParity:
 
     def test_unequal_rates(self):
         """Test with unequal positive rates."""
-        from src.metrics.fairness import demographic_parity
+        from fairness_project.metrics.fairness import demographic_parity
 
         y_pred = np.array([1, 1, 1, 1, 0, 0, 0, 0])
         sensitive = np.array(["A", "A", "A", "A", "B", "B", "B", "B"])
@@ -36,7 +36,7 @@ class TestStatisticalParityDifference:
 
     def test_fair_predictions(self):
         """Test with fair predictions (SPD = 0)."""
-        from src.metrics.fairness import statistical_parity_difference
+        from fairness_project.metrics.fairness import statistical_parity_difference
 
         y_pred = np.array([1, 1, 0, 0, 1, 1, 0, 0])
         sensitive = np.array(["A", "A", "A", "A", "B", "B", "B", "B"])
@@ -47,7 +47,7 @@ class TestStatisticalParityDifference:
 
     def test_biased_predictions(self):
         """Test with biased predictions."""
-        from src.metrics.fairness import statistical_parity_difference
+        from fairness_project.metrics.fairness import statistical_parity_difference
 
         # Group A: 100% positive, Group B: 0% positive
         y_pred = np.array([1, 1, 1, 1, 0, 0, 0, 0])
@@ -59,7 +59,7 @@ class TestStatisticalParityDifference:
 
     def test_negative_spd(self):
         """Test SPD can be negative (unprivileged has higher rate)."""
-        from src.metrics.fairness import statistical_parity_difference
+        from fairness_project.metrics.fairness import statistical_parity_difference
 
         y_pred = np.array([0, 0, 0, 0, 1, 1, 1, 1])
         sensitive = np.array(["A", "A", "A", "A", "B", "B", "B", "B"])
@@ -74,7 +74,7 @@ class TestDisparateImpact:
 
     def test_fair_predictions(self):
         """Test with fair predictions (DI = 1)."""
-        from src.metrics.fairness import disparate_impact
+        from fairness_project.metrics.fairness import disparate_impact
 
         y_pred = np.array([1, 1, 0, 0, 1, 1, 0, 0])
         sensitive = np.array(["A", "A", "A", "A", "B", "B", "B", "B"])
@@ -85,7 +85,7 @@ class TestDisparateImpact:
 
     def test_biased_predictions(self):
         """Test with biased predictions (DI < 1)."""
-        from src.metrics.fairness import disparate_impact
+        from fairness_project.metrics.fairness import disparate_impact
 
         y_pred = np.array([1, 1, 1, 1, 1, 0, 0, 0])
         sensitive = np.array(["A", "A", "A", "A", "B", "B", "B", "B"])
@@ -97,7 +97,7 @@ class TestDisparateImpact:
 
     def test_zero_privileged_rate(self):
         """Test with zero privileged rate returns NaN."""
-        from src.metrics.fairness import disparate_impact
+        from fairness_project.metrics.fairness import disparate_impact
 
         y_pred = np.array([0, 0, 0, 0, 1, 1, 1, 1])
         sensitive = np.array(["A", "A", "A", "A", "B", "B", "B", "B"])
@@ -112,7 +112,7 @@ class TestTruePositiveRate:
 
     def test_perfect_tpr(self):
         """Test with perfect TPR = 1."""
-        from src.metrics.fairness import true_positive_rate
+        from fairness_project.metrics.fairness import true_positive_rate
 
         y_true = np.array([1, 1, 1, 0, 0])
         y_pred = np.array([1, 1, 1, 0, 1])  # All positives correct
@@ -123,7 +123,7 @@ class TestTruePositiveRate:
 
     def test_zero_tpr(self):
         """Test with zero TPR."""
-        from src.metrics.fairness import true_positive_rate
+        from fairness_project.metrics.fairness import true_positive_rate
 
         y_true = np.array([1, 1, 1, 0, 0])
         y_pred = np.array([0, 0, 0, 0, 0])  # All negative predictions
@@ -134,7 +134,7 @@ class TestTruePositiveRate:
 
     def test_partial_tpr(self):
         """Test with partial TPR."""
-        from src.metrics.fairness import true_positive_rate
+        from fairness_project.metrics.fairness import true_positive_rate
 
         y_true = np.array([1, 1, 1, 1, 0, 0])
         y_pred = np.array([1, 1, 0, 0, 0, 0])  # 2 of 4 positives correct
@@ -145,14 +145,14 @@ class TestTruePositiveRate:
 
     def test_no_positives(self):
         """Test with no positive examples."""
-        from src.metrics.fairness import true_positive_rate
+        from fairness_project.metrics.fairness import true_positive_rate
 
         y_true = np.array([0, 0, 0, 0])
         y_pred = np.array([1, 0, 1, 0])
 
         tpr = true_positive_rate(y_true, y_pred)
 
-        assert abs(tpr) < 1e-6  # Returns 0 when no positives
+        assert np.isnan(tpr)
 
 
 class TestComputeFairnessMetrics:
@@ -160,7 +160,7 @@ class TestComputeFairnessMetrics:
 
     def test_returns_all_metrics(self, sample_binary_data):
         """Test that all metrics are returned."""
-        from src.metrics.fairness import compute_fairness_metrics
+        from fairness_project.metrics.fairness import compute_fairness_metrics
 
         result = compute_fairness_metrics(
             y_true=sample_binary_data["y_true"],
@@ -175,7 +175,7 @@ class TestComputeFairnessMetrics:
 
     def test_with_fixture_data(self, biased_predictions):
         """Test with biased fixture data."""
-        from src.metrics.fairness import compute_fairness_metrics
+        from fairness_project.metrics.fairness import compute_fairness_metrics
 
         result = compute_fairness_metrics(
             y_true=biased_predictions["y_true"],

@@ -10,20 +10,9 @@ import os
 import random
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
-
-# Try pydantic, fall back to dataclasses
-try:
-    from pydantic import BaseModel, Field
-
-    HAS_PYDANTIC = True
-except ImportError:
-    HAS_PYDANTIC = False
-    BaseModel = None
-    Field = None
-
 
 # ============================================================================
 # DEFAULT PATHS
@@ -208,7 +197,10 @@ def load_yaml_config(path: str | Path) -> dict[str, Any]:
         raise FileNotFoundError(f"Config file not found: {path}")
 
     with open(path) as f:
-        return yaml.safe_load(f)
+        payload = yaml.safe_load(f)
+    if not isinstance(payload, dict):
+        raise ValueError(f"Config must contain a YAML object: {path}")
+    return cast(dict[str, Any], payload)
 
 
 def config_from_dict(data: dict[str, Any]) -> Config:

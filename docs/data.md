@@ -1,168 +1,122 @@
-# Data Documentation
+# Data documentation
 
-## Adult (Census Income) Dataset
+## Source
 
-### Source
+The project uses the [UCI Adult dataset](https://archive.ics.uci.edu/dataset/2/adult),
+derived from 1994 US Census data and donated by Barry Becker and Ronny Kohavi.
+UCI lists the dataset under CC BY 4.0.
 
-The Adult dataset is from the UCI Machine Learning Repository:
-
-- **URL**: <https://archive.ics.uci.edu/dataset/2/adult>
-- **Original source**: 1994 Census database
-- **Donated by**: Ronny Kohavi and Barry Becker (Silicon Graphics)
-
-### License
-
-The Adult dataset page lists:
-
-- **License**: CC BY 4.0 (Creative Commons Attribution 4.0 International)
-- You are free to share and adapt the data for any purpose
-- Attribution required: Cite the UCI repository and original paper
-
-### Citation
-
-If you use this dataset, please cite:
+Suggested citation:
 
 ```text
 Becker, B. & Kohavi, R. (1996). Adult [Dataset].
 UCI Machine Learning Repository. https://doi.org/10.24432/C5XW20
 ```
 
-### Dataset Description
+The raw distribution contains 48,842 rows: 32,561 in `adult.data` and 16,281
+in `adult.test`. Rows containing UCI's `?` missing-value marker are removed,
+leaving 45,222 model-ready rows in the current rebuild.
 
-**Task**: Binary classification - predict whether income exceeds $50K/year
+## Columns and model contract
 
-**Samples**: 48,842 total (32,561 training + 16,281 test)
+| Column | Role | Model feature |
+|---|---|---:|
+| `age` | numeric attribute | yes |
+| `workclass` | categorical attribute | yes |
+| `fnlwgt` | census sampling weight | yes, with caveat |
+| `education` | categorical attribute | yes |
+| `education_num` | numeric education encoding | yes |
+| `marital_status` | categorical attribute | yes |
+| `occupation` | categorical attribute | yes |
+| `relationship` | categorical attribute | yes |
+| `native_country` | categorical attribute | yes |
+| `capital_gain` | numeric attribute | yes |
+| `capital_loss` | numeric attribute | yes |
+| `hours_per_week` | numeric attribute | yes |
+| `sex` | protected attribute for offline audit | no |
+| `race` | protected attribute for offline audit | no |
+| `race_binary` | derived White/Non-White audit grouping | no |
+| `income` | target, `>50K` versus `<=50K` | no |
+| `split` | official partition marker | no |
 
-**Features**: 14 attributes (6 continuous, 8 categorical)
+`fnlwgt` is a census sampling weight, not an ordinary personal characteristic.
+The reference preserves the original prototype feature choice but flags it
+for a future weighted-sensitivity analysis rather than presenting that choice
+as settled.
 
-### Columns
+## Rebuild and derived files
 
-| Column | Type | Description |
-|--------|------|-------------|
-| age | continuous | Age of individual |
-| workclass | categorical | Type of employment |
-| fnlwgt | continuous | Final sampling weight |
-| education | categorical | Highest education level |
-| education_num | continuous | Education level as number |
-| marital_status | categorical | Marital status |
-| occupation | categorical | Type of occupation |
-| relationship | categorical | Relationship status |
-| race | categorical | Race/ethnicity |
-| sex | categorical | Biological sex (Male/Female) |
-| capital_gain | continuous | Capital gains |
-| capital_loss | continuous | Capital losses |
-| hours_per_week | continuous | Hours worked per week |
-| native_country | categorical | Country of origin |
-| income | target | Income class (>50K, <=50K) |
+Raw UCI files are kept under `data/raw/adult/`. Cleaned CSVs, predictions, and
+model binaries are derived artifacts and are intentionally not versioned.
 
-### Sensitive Attributes
+```bash
+uv run fairness data preprocess \
+  --input-dir data/raw/adult \
+  --output-path data/processed/adult/adult_model_ready.csv
+```
 
-The processed data retains these groupings. The documented leakage-free command
-computes and tunes its reported fairness metrics only for `sex`; a race analysis
-would need to be run and reported separately.
+The command strips whitespace, standardizes test labels, removes missing rows,
+preserves the original train/test markers, and derives `race_binary`.
 
-1. **sex**: Binary (Male/Female)
-   - Privileged group: Male
-   - Unprivileged group: Female
+## Split protocol
 
-2. **race_binary**: Binary (White/Non-White)
-   - Derived from original 'race' column
-   - Available for separate analysis; not evaluated by the documented smoke run
+The external UCI test partition is never resampled. With seed 42, 15% of the
+cleaned original training partition is assigned to validation using joint
+stratification over `income`, `sex`, and `race_binary`.
 
-### Data Processing
+| Split | Rows | Purpose |
+|---|---:|---|
+| Fit | 25,637 | fit preprocessing and classifier |
+| Validation | 4,525 | tune the offline threshold policy |
+| Test | 15,060 | one final held-out evaluation |
 
-1. **Download**: Raw data from UCI repository
-2. **Clean**: Remove missing values, standardize labels
-3. **Split**: Use original train/test split (preserved in 'split' column)
-4. **Validation**: For EO threshold tuning, create val split from training data
+The splitter validates the ratio and required columns, rejects sparse strata
+that cannot be divided safely, does not mutate NumPy's global random state, and
+records every split/group/label cell in the report.
 
-### Known Issues
+## Feature preprocessing
 
-1. **Historical bias**: Data from 1994 reflects historical disparities
-2. **Missing values**: ~7% of rows have missing values (handled by removal)
-3. **Feature selection**: fnlwgt is sampling weight, not a predictive feature
-4. **Label imbalance**: ~24% positive class (>50K)
+Numeric features are standardized and categorical features are one-hot encoded
+inside the fitted scikit-learn pipeline. Unknown categories at inference use
+`OneHotEncoder(handle_unknown="ignore")`. Missing, null, or extra API/batch
+columns are rejected before the model is called.
 
-### File Structure
+## Lineage and provenance
 
 ```text
-data/
-├── raw/adult/
-│   ├── adult.data      # Training data
-│   ├── adult.test      # Test data
-│   └── adult.names     # Column descriptions
-└── processed/adult/
-    └── adult_model_ready.csv  # Cleaned, combined data
+Bundled UCI raw files
+  -> deterministic cleaning and split labels
+  -> SHA-256 fingerprinted model-ready CSV
+  -> joint-stratified fit/validation split; official test preserved
+  -> fitted 12-feature preprocessing + classifier
+  -> validation-only threshold tuning
+  -> frozen test evaluation and paired bootstrap
+  -> model + manifest + policy + report + predictions bundle
+  -> baseline-only API and batch inference
 ```
 
-### Usage
+Each report records the data hash, canonical package-source hash, seed, model
+type, Python and dependency versions, split cells, thresholds, subgroup
+diagnostics, uncertainty, and policy verdict. Source checkouts also record the
+owning checkout's full Git commit and dirty-worktree flag; installed
+distributions use an explicit unavailable/null pair and never inspect the
+caller's repository. The manifest also records model, report, and policy
+digests; loading fails closed when the bundle is incomplete, corrupted, or no
+longer matches those recorded digests. Because the manifest is not signed, this
+is an integrity check rather than proof against an attacker who can rewrite the
+entire bundle.
 
-```python
-# Download data
-from fairness_project.data.download import download_adult_dataset
-download_adult_dataset()
+## Data limitations
 
-# Preprocess data
-from fairness_project.data.preprocess import prepare_model_ready_data
-df = prepare_model_ready_data()
+- Adult is income data, not applicant, qualification, performance, or hiring
+  data.
+- The records are historical and encode social and economic inequities.
+- Removing missing rows can change group representation and is not neutral.
+- Binary group mappings erase identity, intersectionality, and uncertainty.
+- The label is imbalanced and some intersectional positive-label cells are
+  small.
+- The reference is unweighted despite `fnlwgt`; this limits population-level
+  interpretation.
 
-# Validate schema
-from fairness_project.data.schema import validate_dataframe
-errors = validate_dataframe(df)
-```
-
-### API Input Schema
-
-The prediction API accepts 12 fields. Protected attributes (`sex`, `race`) and the target (`income`) are intentionally excluded from the input schema.
-
-| Field | Type | Constraints | Description |
-|-------|------|-------------|-------------|
-| `age` | int | 0-120 | Age of individual |
-| `workclass` | string | required | Type of employment (Private, Self-emp-not-inc, Self-emp-inc, Federal-gov, Local-gov, State-gov, Without-pay, Never-worked) |
-| `fnlwgt` | int | >= 0 | Final sampling weight |
-| `education` | string | required | Highest education level (Bachelors, Some-college, 11th, HS-grad, Prof-school, Assoc-acdm, Assoc-voc, 9th, 7th-8th, 12th, Masters, 1st-4th, 10th, Doctorate, 5th-6th, Preschool) |
-| `education_num` | int | 1-20 | Education level as number |
-| `marital_status` | string | required | Marital status (Married-civ-spouse, Divorced, Never-married, Separated, Widowed, Married-spouse-absent, Married-AF-spouse) |
-| `occupation` | string | required | Type of occupation (Tech-support, Craft-repair, Other-service, Sales, Exec-managerial, Prof-specialty, Handlers-cleaners, Machine-op-inspct, Adm-clerical, Farming-fishing, Transport-moving, Priv-house-serv, Protective-serv, Armed-Forces) |
-| `relationship` | string | required | Relationship status (Wife, Own-child, Husband, Not-in-family, Other-relative, Unmarried) |
-| `native_country` | string | required | Country of origin |
-| `capital_gain` | int | >= 0 | Capital gains |
-| `capital_loss` | int | >= 0 | Capital losses |
-| `hours_per_week` | int | 0-168 | Hours worked per week |
-
-**Unknown value handling**: The preprocessing pipeline uses `OneHotEncoder` with `handle_unknown="ignore"`, so unseen categorical values are mapped to a zero vector rather than causing errors.
-
-### Data Lineage
-
-**Training flow**:
-
-```text
-UCI Repository → Download (raw/) → Preprocess (processed/) → Train/Val/Test Split
-→ Feature Engineering (StandardScaler + OneHotEncoder) → Model Training
-→ Test Evaluation → Prediction and Metric CSV Files
-```
-
-**Intended API-scaffold flow**:
-
-```text
-User Input → Pydantic Validation → DataFrame → Model.predict() → Response → Audit Log
-```
-
-This flow is not currently runnable end to end with the tracked model artifact;
-see [API Scaffold and Operations Notes](deployment.md).
-
-The verified leakage-free script records CSV outputs but does not create a
-versioned model registry or run manifest. Record the commit, Python environment,
-seed, and command separately when reporting results.
-
-### Ethical Considerations
-
-This dataset is used for **educational and research purposes** to study
-algorithmic fairness. These results do not justify use in real hiring decisions.
-A separate real-world project would require, at minimum:
-
-1. **Legal compliance**: Ensure compliance with employment discrimination laws
-2. **Stakeholder involvement**: Include affected communities in model development
-3. **Regular auditing**: Continuously monitor for fairness issues
-4. **Human oversight**: ML predictions should inform, not replace, human decisions
-5. **Documentation**: Maintain clear records of model decisions and their basis
+These data support a benchmark fairness audit only. They do not support
+claims about real candidates or employment decisions.

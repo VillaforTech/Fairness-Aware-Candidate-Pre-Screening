@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
+
+
+def _validate_equal_length(**arrays: np.ndarray) -> None:
+    lengths = {name: len(np.asarray(values)) for name, values in arrays.items()}
+    if len(set(lengths.values())) > 1:
+        raise ValueError(f"Inputs must have equal lengths, got {lengths}")
 
 
 def demographic_parity(y: np.ndarray, sensitive: np.ndarray) -> dict[Any, float]:
@@ -24,8 +30,9 @@ def demographic_parity(y: np.ndarray, sensitive: np.ndarray) -> dict[Any, float]
     dict[Any, float]
         Dictionary mapping group values to positive prediction rates.
     """
+    _validate_equal_length(y=y, sensitive=sensitive)
     df = pd.DataFrame({"y": y, "sensitive": sensitive})
-    return df.groupby("sensitive")["y"].mean().to_dict()
+    return cast(dict[Any, float], df.groupby("sensitive")["y"].mean().to_dict())
 
 
 def statistical_parity_difference(
@@ -53,15 +60,17 @@ def statistical_parity_difference(
         Statistical parity difference. Ideal value is 0.
     """
     dp = demographic_parity(y, sensitive)
+    if privileged_group not in dp:
+        raise ValueError(f"Privileged group {privileged_group!r} is absent")
     privileged_rate = dp[privileged_group]
 
     # Get unprivileged group(s) - average rate for multi-group case
     unprivileged_rates = [rate for g, rate in dp.items() if g != privileged_group]
     if not unprivileged_rates:
-        return 0.0
+        raise ValueError("At least one unprivileged group is required")
     unprivileged_rate = np.mean(unprivileged_rates)
 
-    return privileged_rate - unprivileged_rate
+    return float(privileged_rate - unprivileged_rate)
 
 
 def disparate_impact(
@@ -90,6 +99,8 @@ def disparate_impact(
         Returns NaN if privileged rate is 0.
     """
     dp = demographic_parity(y, sensitive)
+    if privileged_group not in dp:
+        raise ValueError(f"Privileged group {privileged_group!r} is absent")
     privileged_rate = dp[privileged_group]
 
     if privileged_rate == 0:
@@ -98,10 +109,10 @@ def disparate_impact(
     # Get unprivileged group(s) - average rate for multi-group case
     unprivileged_rates = [rate for g, rate in dp.items() if g != privileged_group]
     if not unprivileged_rates:
-        return 1.0
+        raise ValueError("At least one unprivileged group is required")
     unprivileged_rate = np.mean(unprivileged_rates)
 
-    return unprivileged_rate / privileged_rate
+    return float(unprivileged_rate / privileged_rate)
 
 
 def true_positive_rate(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -125,11 +136,12 @@ def true_positive_rate(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
 
+    _validate_equal_length(y_true=y_true, y_pred=y_pred)
     mask_pos = y_true == 1
     if mask_pos.sum() == 0:
-        return 0.0
+        return float("nan")
 
-    return (y_pred[mask_pos] == 1).mean()
+    return float((y_pred[mask_pos] == 1).mean())
 
 
 def false_positive_rate(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -153,11 +165,12 @@ def false_positive_rate(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
 
+    _validate_equal_length(y_true=y_true, y_pred=y_pred)
     mask_neg = y_true == 0
     if mask_neg.sum() == 0:
-        return 0.0
+        return float("nan")
 
-    return (y_pred[mask_neg] == 1).mean()
+    return float((y_pred[mask_neg] == 1).mean())
 
 
 def equalized_odds_difference(
@@ -188,6 +201,15 @@ def equalized_odds_difference(
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
     sensitive = np.asarray(sensitive)
+    _validate_equal_length(y_true=y_true, y_pred=y_pred, sensitive=sensitive)
+
+    groups = set(np.unique(sensitive))
+    if privileged_group not in groups:
+        raise ValueError(f"Privileged group {privileged_group!r} is absent")
+    if len(groups) != 2:
+        raise ValueError(
+            f"Binary fairness metrics require exactly two groups, got {sorted(groups)}"
+        )
 
     priv_mask = sensitive == privileged_group
     unpriv_mask = ~priv_mask

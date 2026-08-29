@@ -1,142 +1,228 @@
-"""Tests for the governance gate module."""
+"""Tests for strict evaluation-report governance checks."""
 
 from __future__ import annotations
 
 import json
+import math
 
 import pytest
 
-from fairness_project.governance.gate import (
-    GateThresholds,
-    check_gate,
-    load_report,
-    main,
-)
+from fairness_project.governance.gate import GateThresholds, check_gate, load_report, main
 
 
 def _make_report(
     accuracy: float = 0.85,
+    baseline_accuracy: float = 0.86,
     tpr_gap: float = 0.03,
     di: float = 0.90,
     spd: float = 0.05,
 ) -> dict:
-    """Create a sample report dict."""
     return {
-        "metadata": {"run_id": "test_run"},
+        "schema_version": "1.0",
+        "metadata": {
+            "run_id": "test_run",
+            "seed": 42,
+            "model_type": "lr",
+            "git_commit": "a" * 40,
+            "dirty_worktree": False,
+            "data_sha256": "b" * 64,
+            "source_sha256": "c" * 64,
+        },
         "results": {
+            "baseline_metrics": {"accuracy": baseline_accuracy},
             "metrics": {
                 "accuracy": accuracy,
                 "TPR_gap": tpr_gap,
                 "DI": di,
                 "SPD": spd,
-            }
+            },
         },
     }
 
 
-class TestCheckGate:
-    def test_passing_report(self):
-        report = _make_report(accuracy=0.85, tpr_gap=0.03, di=0.90, spd=0.05)
-        result = check_gate(report)
-        assert result.passed is True
-        assert result.violations == []
-
-    def test_failing_accuracy(self):
-        report = _make_report(accuracy=0.50)
-        result = check_gate(report)
-        assert result.passed is False
-        assert any("accuracy" in v for v in result.violations)
-
-    def test_failing_tpr_gap(self):
-        report = _make_report(tpr_gap=0.20)
-        result = check_gate(report)
-        assert result.passed is False
-        assert any("TPR_gap" in v for v in result.violations)
-
-    def test_failing_di(self):
-        report = _make_report(di=0.50)
-        result = check_gate(report)
-        assert result.passed is False
-        assert any("DI" in v for v in result.violations)
-
-    def test_failing_spd(self):
-        report = _make_report(spd=0.30)
-        result = check_gate(report)
-        assert result.passed is False
-        assert any("SPD" in v for v in result.violations)
-
-    def test_multiple_violations(self):
-        report = _make_report(accuracy=0.50, tpr_gap=0.20, di=0.40, spd=0.30)
-        result = check_gate(report)
-        assert result.passed is False
-        assert len(result.violations) == 4
-
-    def test_custom_thresholds(self):
-        report = _make_report(accuracy=0.70)
-        # With default thresholds this would fail
-        result_default = check_gate(report)
-        assert result_default.passed is False
-
-        # With relaxed thresholds it should pass
-        thresholds = GateThresholds(min_accuracy=0.60)
-        result_custom = check_gate(report, thresholds)
-        assert result_custom.passed is True
-
-    def test_missing_metrics_fail_closed(self):
-        report = {"metadata": {}, "results": {"metrics": {}}}
-        result = check_gate(report)
-        assert result.passed is False
-        assert len(result.violations) == 4
-        assert all("missing required metric" in violation for violation in result.violations)
-        assert result.metrics_checked == {}
-
-    def test_metrics_checked_populated(self):
-        report = _make_report()
-        result = check_gate(report)
-        assert "accuracy" in result.metrics_checked
-        assert "TPR_gap" in result.metrics_checked
-        assert "DI" in result.metrics_checked
-        assert "SPD" in result.metrics_checked
+def test_passing_report_checks_accuracy_tradeoff() -> None:
+    result = check_gate(_make_report())
+    assert result.passed is True
+    assert result.report_valid is True
+    assert result.exit_code == 0
+    assert result.metrics_checked["accuracy_drop"] == pytest.approx(0.01)
 
 
-class TestLoadReport:
-    def test_load_valid_report(self, tmp_path):
-        report = _make_report()
-        path = tmp_path / "report.json"
-        path.write_text(json.dumps(report))
+@pytest.mark.parametrize(
+    ("overrides", "metric"),
+    [
+        ({"accuracy": 0.50}, "accuracy"),
+        ({"baseline_accuracy": 0.90, "accuracy": 0.85}, "accuracy_drop"),
+        ({"tpr_gap": 0.20}, "TPR_gap"),
+        ({"di": 0.50}, "DI"),
+        ({"di": 1.50}, "DI"),
+        ({"spd": 0.30}, "SPD"),
+    ],
+)
+def test_policy_violations_fail(overrides, metric) -> None:
+    result = check_gate(_make_report(**overrides))
+    assert result.passed is False
+    assert result.report_valid is True
+    assert result.exit_code == 1
+    assert any(metric in violation for violation in result.violations)
 
-        loaded = load_report(path)
-        assert loaded["metadata"]["run_id"] == "test_run"
 
-    def test_load_missing_file(self):
-        with pytest.raises(FileNotFoundError):
-            load_report("/nonexistent/report.json")
+@pytest.mark.parametrize("invalid", [math.nan, math.inf, -math.inf, True, "0.9"])
+def test_invalid_metric_types_and_non_finite_values_fail(invalid) -> None:
+    report = _make_report()
+    report["results"]["metrics"]["TPR_gap"] = invalid
+    result = check_gate(report)
+    assert result.passed is False
+    assert result.report_valid is False
+    assert result.exit_code == 2
+    assert any("TPR_gap" in violation for violation in result.violations)
 
 
-class TestMainCLI:
-    def test_main_pass(self, tmp_path):
-        report = _make_report()
-        path = tmp_path / "report.json"
-        path.write_text(json.dumps(report))
+def test_missing_metrics_and_metadata_fail_closed() -> None:
+    result = check_gate({"schema_version": "1.0", "metadata": {}, "results": {}})
+    assert result.passed is False
+    assert result.report_valid is False
+    assert any("results.metrics must be an object" in item for item in result.violations)
+    assert any("metadata.run_id" in item for item in result.violations)
 
-        exit_code = main(["--report", str(path)])
-        assert exit_code == 0
 
-    def test_main_fail(self, tmp_path):
-        report = _make_report(accuracy=0.50, tpr_gap=0.20)
-        path = tmp_path / "report.json"
-        path.write_text(json.dumps(report))
+def test_wrong_schema_version_fails() -> None:
+    report = _make_report()
+    report["schema_version"] = "0.1"
+    result = check_gate(report)
+    assert result.passed is False
+    assert result.report_valid is False
+    assert result.exit_code == 2
 
-        exit_code = main(["--report", str(path)])
-        assert exit_code == 1
 
-    def test_main_custom_thresholds(self, tmp_path):
-        report = _make_report(accuracy=0.70)
-        path = tmp_path / "report.json"
-        path.write_text(json.dumps(report))
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    [
+        ("run_id", "", "nonempty string"),
+        ("run_id", "   ", "nonempty string"),
+        ("run_id", 42, "nonempty string"),
+        ("seed", True, "non-Boolean nonnegative integer"),
+        ("seed", -1, "non-Boolean nonnegative integer"),
+        ("seed", 42.0, "non-Boolean nonnegative integer"),
+        ("model_type", "svm", "must be one of"),
+        ("model_type", "LR", "must be one of"),
+        ("git_commit", "a" * 39, "lowercase 40-hex"),
+        ("git_commit", "A" * 40, "lowercase 40-hex"),
+        ("git_commit", "g" * 40, "lowercase 40-hex"),
+        ("data_sha256", "b" * 63, "64-hex SHA-256"),
+        ("data_sha256", "z" * 64, "64-hex SHA-256"),
+        ("source_sha256", 123, "64-hex SHA-256"),
+    ],
+)
+def test_invalid_metadata_makes_report_structurally_invalid(field, value, expected) -> None:
+    report = _make_report()
+    report["metadata"][field] = value
 
-        # Should fail with defaults
-        assert main(["--report", str(path)]) == 1
+    result = check_gate(report)
 
-        # Should pass with relaxed threshold
-        assert main(["--report", str(path), "--min-accuracy", "0.60"]) == 0
+    assert result.passed is False
+    assert result.report_valid is False
+    assert result.exit_code == 2
+    assert any(expected in violation for violation in result.violations)
+    assert result.metrics_checked == {}
+
+
+def test_installed_distribution_provenance_is_explicit_and_valid() -> None:
+    report = _make_report()
+    report["metadata"]["git_commit"] = "unavailable"
+    report["metadata"]["dirty_worktree"] = None
+
+    result = check_gate(report)
+
+    assert result.report_valid is True
+    assert result.exit_code == 0
+
+
+@pytest.mark.parametrize(
+    ("git_commit", "dirty_worktree", "expected"),
+    [
+        ("unavailable", False, "must be null"),
+        ("a" * 40, None, "must be Boolean"),
+    ],
+)
+def test_git_revision_and_worktree_state_must_agree(git_commit, dirty_worktree, expected) -> None:
+    report = _make_report()
+    report["metadata"]["git_commit"] = git_commit
+    report["metadata"]["dirty_worktree"] = dirty_worktree
+
+    result = check_gate(report)
+
+    assert result.report_valid is False
+    assert result.exit_code == 2
+    assert any(expected in violation for violation in result.violations)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"min_accuracy": 2},
+        {"max_accuracy_drop": -0.1},
+        {"max_tpr_gap": math.nan},
+        {"min_disparate_impact": 0},
+        {"max_disparate_impact": 0.9},
+        {"max_spd": True},
+    ],
+)
+def test_invalid_policy_thresholds_are_rejected(kwargs) -> None:
+    with pytest.raises(ValueError):
+        GateThresholds(**kwargs)
+
+
+def test_custom_thresholds() -> None:
+    report = _make_report(accuracy=0.70, baseline_accuracy=0.71)
+    assert check_gate(report).passed is False
+    assert check_gate(report, GateThresholds(min_accuracy=0.60)).passed is True
+
+
+def test_load_report_and_cli_exit_codes(tmp_path) -> None:
+    passing = tmp_path / "passing.json"
+    failing = tmp_path / "failing.json"
+    malformed = tmp_path / "malformed.json"
+    passing.write_text(json.dumps(_make_report()))
+    failing.write_text(json.dumps(_make_report(di=0.4)))
+    malformed_report = _make_report()
+    malformed_report["metadata"]["git_commit"] = "abc123"
+    malformed.write_text(json.dumps(malformed_report))
+    assert load_report(passing)["metadata"]["run_id"] == "test_run"
+    assert main(["--report", str(passing)]) == 0
+    assert main(["--report", str(failing)]) == 1
+    assert main(["--report", str(malformed)]) == 2
+
+
+def test_cli_returns_error_for_invalid_json(tmp_path) -> None:
+    path = tmp_path / "bad.json"
+    path.write_text("{not-json}")
+    assert main(["--report", str(path)]) == 2
+
+
+def test_fairness_gate_command_uses_the_same_exit_codes(tmp_path) -> None:
+    from typer.testing import CliRunner
+
+    from fairness_project.cli import app
+
+    runner = CliRunner()
+    passing = tmp_path / "passing.json"
+    failing = tmp_path / "failing.json"
+    malformed = tmp_path / "malformed.json"
+    invalid_json = tmp_path / "invalid.json"
+    passing.write_text(json.dumps(_make_report()))
+    failing.write_text(json.dumps(_make_report(di=0.4)))
+    malformed_report = _make_report()
+    malformed_report["metadata"]["seed"] = True
+    malformed.write_text(json.dumps(malformed_report))
+    invalid_json.write_text("{not-json}")
+
+    assert runner.invoke(app, ["gate", "--report", str(passing)]).exit_code == 0
+    assert runner.invoke(app, ["gate", "--report", str(failing)]).exit_code == 1
+    assert runner.invoke(app, ["gate", "--report", str(malformed)]).exit_code == 2
+    assert runner.invoke(app, ["gate", "--report", str(invalid_json)]).exit_code == 2
+
+
+def test_load_missing_file() -> None:
+    with pytest.raises(FileNotFoundError):
+        load_report("/nonexistent/report.json")

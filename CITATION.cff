@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use this benchmark audit, cite the repository and the UCI Adult dataset."
+title: "Fairness-Aware Candidate Pre-Screening: UCI Adult Fairness Audit"
+type: software
+version: 0.2.0
+date-released: 2026-08-28
+authors:
+  - family-names: Villafuerte
+    given-names: Roberto
+  - family-names: Santhakumar
+    given-names: Charles
+repository-code: "https://github.com/VillaforTech/Fairness-Aware-Candidate-Pre-Screening"

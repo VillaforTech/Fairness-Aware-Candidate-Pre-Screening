@@ -7,9 +7,11 @@ Generates JSON and Markdown reports for experiment documentation.
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from fairness_project.provenance import git_state
 
 
 def generate_run_metadata(
@@ -38,31 +40,18 @@ def generate_run_metadata(
         Run metadata.
     """
     if run_id is None:
-        run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
-    # Try to get git commit hash
-    git_commit = None
-    try:
-        import subprocess
-
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0:
-            git_commit = result.stdout.strip()[:8]
-    except Exception:
-        pass
+    revision = git_state()
 
     return {
         "run_id": run_id,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "seed": seed,
         "model_type": model_type,
         "config_path": config_path,
-        "git_commit": git_commit,
+        "git_commit": revision.commit,
+        "dirty_worktree": revision.dirty_worktree,
     }
 
 
@@ -105,7 +94,7 @@ def generate_json_report(
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w") as f:
-            json.dump(report, f, indent=2, default=str)
+            json.dump(report, f, indent=2, default=str, allow_nan=False)
         print(f"JSON report saved to: {output_path}")
 
     return report

@@ -9,7 +9,8 @@ class TestBuildPreprocessingPipeline:
     def test_returns_transformer(self, sample_adult_data):
         """Test that function returns a ColumnTransformer."""
         from sklearn.compose import ColumnTransformer
-        from src.preprocessing.preprocess import build_preprocessing_pipeline
+
+        from fairness_project.features.preprocessing import build_preprocessing_pipeline
 
         preprocess, num_cols, cat_cols = build_preprocessing_pipeline(sample_adult_data)
 
@@ -19,7 +20,7 @@ class TestBuildPreprocessingPipeline:
 
     def test_excludes_sensitive_columns(self, sample_adult_data):
         """Test that sensitive columns are excluded from features."""
-        from src.preprocessing.preprocess import build_preprocessing_pipeline
+        from fairness_project.features.preprocessing import build_preprocessing_pipeline
 
         preprocess, num_cols, cat_cols = build_preprocessing_pipeline(sample_adult_data)
 
@@ -33,7 +34,7 @@ class TestBuildPreprocessingPipeline:
 
     def test_includes_numeric_features(self, sample_adult_data):
         """Test that numeric features are included."""
-        from src.preprocessing.preprocess import build_preprocessing_pipeline
+        from fairness_project.features.preprocessing import build_preprocessing_pipeline
 
         preprocess, num_cols, cat_cols = build_preprocessing_pipeline(sample_adult_data)
 
@@ -43,7 +44,7 @@ class TestBuildPreprocessingPipeline:
 
     def test_includes_categorical_features(self, sample_adult_data):
         """Test that categorical features are included."""
-        from src.preprocessing.preprocess import build_preprocessing_pipeline
+        from fairness_project.features.preprocessing import build_preprocessing_pipeline
 
         preprocess, num_cols, cat_cols = build_preprocessing_pipeline(sample_adult_data)
 
@@ -53,7 +54,7 @@ class TestBuildPreprocessingPipeline:
 
     def test_pipeline_can_fit_transform(self, sample_adult_data):
         """Test that the pipeline can fit and transform data."""
-        from src.preprocessing.preprocess import build_preprocessing_pipeline
+        from fairness_project.features.preprocessing import build_preprocessing_pipeline
 
         df_train = sample_adult_data[sample_adult_data["split"] == "train"]
         X_train = df_train.drop(columns=["income", "sex", "race", "race_binary", "split"])
@@ -68,7 +69,7 @@ class TestBuildPreprocessingPipeline:
 
     def test_handles_unknown_categories(self, sample_adult_data):
         """Test that unknown categories are handled gracefully."""
-        from src.preprocessing.preprocess import build_preprocessing_pipeline
+        from fairness_project.features.preprocessing import build_preprocessing_pipeline
 
         df_train = sample_adult_data[sample_adult_data["split"] == "train"].copy()
         df_test = sample_adult_data[sample_adult_data["split"] == "test"].copy()
@@ -93,7 +94,7 @@ class TestPreprocessingConsistency:
 
     def test_same_output_dimensions(self, sample_adult_data):
         """Test that train and test have same number of features after transform."""
-        from src.preprocessing.preprocess import build_preprocessing_pipeline
+        from fairness_project.features.preprocessing import build_preprocessing_pipeline
 
         df_train = sample_adult_data[sample_adult_data["split"] == "train"]
         df_test = sample_adult_data[sample_adult_data["split"] == "test"]
@@ -111,7 +112,7 @@ class TestPreprocessingConsistency:
 
     def test_numeric_features_scaled(self, sample_adult_data):
         """Test that numeric features are scaled (mean ~0, std ~1)."""
-        from src.preprocessing.preprocess import build_preprocessing_pipeline
+        from fairness_project.features.preprocessing import build_preprocessing_pipeline
 
         df_train = sample_adult_data[sample_adult_data["split"] == "train"]
         X_train = df_train.drop(columns=["income", "sex", "race", "race_binary", "split"])

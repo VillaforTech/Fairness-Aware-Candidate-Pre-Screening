@@ -7,6 +7,31 @@ from typing import Any
 import numpy as np
 
 
+def _validate_same_length(**arrays: np.ndarray) -> None:
+    lengths = {name: len(np.asarray(value)) for name, value in arrays.items()}
+    if not lengths or len(set(lengths.values())) == 1:
+        return
+    raise ValueError(f"Inputs must have equal lengths, got {lengths}")
+
+
+def _validate_probabilities(values: np.ndarray, name: str) -> np.ndarray:
+    probabilities = np.asarray(values, dtype=float)
+    if probabilities.ndim != 1:
+        raise ValueError(f"{name} must be a one-dimensional array")
+    if not np.isfinite(probabilities).all():
+        raise ValueError(f"{name} must contain only finite values")
+    if ((probabilities < 0) | (probabilities > 1)).any():
+        raise ValueError(f"{name} must contain values between 0 and 1")
+    return probabilities
+
+
+def _validate_threshold(value: float, name: str) -> float:
+    threshold = float(value)
+    if not np.isfinite(threshold) or not 0 <= threshold <= 1:
+        raise ValueError(f"{name} must be a finite value between 0 and 1")
+    return threshold
+
+
 def compute_tpr(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """
     Compute True Positive Rate (TPR).
@@ -23,14 +48,15 @@ def compute_tpr(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     Returns
     -------
     float
-        True positive rate. Returns 0.0 if no positive examples.
+        True positive rate. Returns NaN if no positive examples exist.
     """
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
 
+    _validate_same_length(y_true=y_true, y_pred=y_pred)
     mask_pos = y_true == 1
     if mask_pos.sum() == 0:
-        return 0.0
+        return float("nan")
 
     return float((y_pred[mask_pos] == 1).mean())
 
@@ -41,6 +67,7 @@ def find_optimal_threshold(
     target_tpr: float,
     n_thresholds: int = 101,
     search_range: tuple[float, float] = (0.0, 0.5),
+    reference_threshold: float = 0.5,
 ) -> tuple[float, float]:
     """
     Find optimal threshold to achieve target TPR.
@@ -63,7 +90,21 @@ def find_optimal_threshold(
     tuple[float, float]
         Best threshold and achieved TPR.
     """
-    thresholds = np.linspace(search_range[0], search_range[1], n_thresholds)
+    _validate_same_length(y_true=y_true, y_proba=y_proba)
+    y_proba = _validate_probabilities(y_proba, "y_proba")
+    if not np.isfinite(target_tpr) or not 0 <= target_tpr <= 1:
+        raise ValueError("target_tpr must be a finite value between 0 and 1")
+    if n_thresholds < 2:
+        raise ValueError("n_thresholds must be at least 2")
+    search_min = _validate_threshold(search_range[0], "search_range minimum")
+    search_max = _validate_threshold(search_range[1], "search_range maximum")
+    if search_min > search_max:
+        raise ValueError("search_range minimum cannot exceed its maximum")
+    reference_threshold = _validate_threshold(reference_threshold, "reference_threshold")
+    if not (y_true == 1).any():
+        raise ValueError("TPR is undefined because this group has no positive labels")
+
+    thresholds = np.linspace(search_min, search_max, n_thresholds)
     best_threshold = search_range[1]
     best_diff = float("inf")
     best_tpr = 0.0
@@ -73,7 +114,11 @@ def find_optimal_threshold(
         tpr = compute_tpr(y_true, preds)
         diff = abs(tpr - target_tpr)
 
-        if diff < best_diff:
+        is_better_fit = diff < best_diff
+        is_smaller_change = np.isclose(diff, best_diff) and abs(th - reference_threshold) < abs(
+            best_threshold - reference_threshold
+        )
+        if is_better_fit or is_smaller_change:
             best_diff = diff
             best_threshold = th
             best_tpr = tpr
@@ -88,6 +133,8 @@ def equal_opportunity_postprocessing(
     privileged_value: Any = "Male",
     unprivileged_value: Any = "Female",
     base_threshold: float = 0.5,
+    n_thresholds: int = 101,
+    search_range: tuple[float, float] = (0.0, 0.5),
 ) -> tuple[np.ndarray, dict[str, Any]]:
     """
     Equal Opportunity post-processing for a binary classifier.
@@ -121,8 +168,14 @@ def equal_opportunity_postprocessing(
         - Info dictionary with TPRs and thresholds
     """
     y_true = np.asarray(y_true)
-    y_pred_proba = np.asarray(y_pred_proba)
+    y_pred_proba = _validate_probabilities(y_pred_proba, "y_pred_proba")
     sensitive_attr = np.asarray(sensitive_attr)
+    _validate_same_length(
+        y_true=y_true,
+        y_pred_proba=y_pred_proba,
+        sensitive_attr=sensitive_attr,
+    )
+    base_threshold = _validate_threshold(base_threshold, "base_threshold")
 
     priv_mask = sensitive_attr == privileged_value
     unpriv_mask = sensitive_attr == unprivileged_value
@@ -132,6 +185,13 @@ def equal_opportunity_postprocessing(
         raise ValueError(f"No samples with privileged value '{privileged_value}' found.")
     if unpriv_mask.sum() == 0:
         raise ValueError(f"No samples with unprivileged value '{unprivileged_value}' found.")
+    unknown_values = set(np.unique(sensitive_attr)) - {privileged_value, unprivileged_value}
+    if unknown_values:
+        raise ValueError(f"Unexpected sensitive attribute values: {sorted(unknown_values)}")
+    if not (y_true[priv_mask] == 1).any():
+        raise ValueError(f"TPR is undefined for '{privileged_value}': no positive labels")
+    if not (y_true[unpriv_mask] == 1).any():
+        raise ValueError(f"TPR is undefined for '{unprivileged_value}': no positive labels")
 
     # Baseline predictions with common threshold
     y_pred_base = (y_pred_proba >= base_threshold).astype(int)
@@ -157,6 +217,9 @@ def equal_opportunity_postprocessing(
         y_true=y_true[unpriv_mask],
         y_proba=y_pred_proba[unpriv_mask],
         target_tpr=tpr_priv,
+        n_thresholds=n_thresholds,
+        search_range=search_range,
+        reference_threshold=base_threshold,
     )
 
     # Construct adjusted predictions
@@ -208,20 +271,22 @@ def apply_thresholds(
     np.ndarray
         Binary predictions with group-specific thresholds applied.
     """
-    y_pred_proba = np.asarray(y_pred_proba)
+    y_pred_proba = _validate_probabilities(y_pred_proba, "y_pred_proba")
     sensitive_attr = np.asarray(sensitive_attr)
+    _validate_same_length(y_pred_proba=y_pred_proba, sensitive_attr=sensitive_attr)
+    threshold_priv = _validate_threshold(threshold_priv, "threshold_priv")
+    threshold_unpriv = _validate_threshold(threshold_unpriv, "threshold_unpriv")
 
     priv_mask = sensitive_attr == privileged_value
     unpriv_mask = sensitive_attr == unprivileged_value
 
+    unknown_values = set(np.unique(sensitive_attr)) - {privileged_value, unprivileged_value}
+    if unknown_values:
+        raise ValueError(f"Unexpected sensitive attribute values: {sorted(unknown_values)}")
+
     y_pred = np.zeros(len(y_pred_proba), dtype=int)
     y_pred[priv_mask] = (y_pred_proba[priv_mask] >= threshold_priv).astype(int)
     y_pred[unpriv_mask] = (y_pred_proba[unpriv_mask] >= threshold_unpriv).astype(int)
-
-    # Handle any remaining groups with base threshold
-    other_mask = ~(priv_mask | unpriv_mask)
-    if other_mask.any():
-        y_pred[other_mask] = (y_pred_proba[other_mask] >= threshold_priv).astype(int)
 
     return y_pred
 
@@ -233,6 +298,8 @@ def tune_equal_opportunity(
     privileged_value: Any = "Male",
     unprivileged_value: Any = "Female",
     base_threshold: float = 0.5,
+    n_thresholds: int = 101,
+    search_range: tuple[float, float] = (0.0, 0.5),
 ) -> dict[str, Any]:
     """
     Tune EO thresholds on validation data only.
@@ -273,6 +340,8 @@ def tune_equal_opportunity(
         privileged_value=privileged_value,
         unprivileged_value=unprivileged_value,
         base_threshold=base_threshold,
+        n_thresholds=n_thresholds,
+        search_range=search_range,
     )
 
     return {

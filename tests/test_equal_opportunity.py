@@ -1,170 +1,102 @@
-"""Tests for Equal Opportunity post-processing."""
+"""Tests for the canonical validation-only threshold policy."""
 
 import numpy as np
 import pytest
 
-
-class TestComputeTPR:
-    """Tests for TPR computation in EO module."""
-
-    def test_basic_tpr(self):
-        """Test basic TPR calculation."""
-        from src.techniques.equal_opportunity import compute_tpr
-
-        y_true = np.array([1, 1, 1, 1, 0, 0])
-        y_pred = np.array([1, 1, 0, 0, 0, 1])  # 2/4 positives correct
-
-        tpr = compute_tpr(y_true, y_pred)
-
-        assert abs(tpr - 0.5) < 1e-6
-
-    def test_perfect_tpr(self):
-        """Test perfect TPR."""
-        from src.techniques.equal_opportunity import compute_tpr
-
-        y_true = np.array([1, 1, 1, 0, 0])
-        y_pred = np.array([1, 1, 1, 0, 0])
-
-        tpr = compute_tpr(y_true, y_pred)
-
-        assert abs(tpr - 1.0) < 1e-6
+from fairness_project.fairness.postprocess import (
+    apply_thresholds,
+    compute_tpr,
+    equal_opportunity_postprocessing,
+    find_optimal_threshold,
+    tune_equal_opportunity,
+)
 
 
-class TestEqualOpportunityPostprocessing:
-    """Tests for EO post-processing."""
+def test_compute_tpr() -> None:
+    y_true = np.array([1, 1, 1, 1, 0, 0])
+    y_pred = np.array([1, 1, 0, 0, 0, 1])
+    assert compute_tpr(y_true, y_pred) == pytest.approx(0.5)
 
-    def test_reduces_tpr_gap(self, biased_predictions):
-        """Test that EO post-processing reduces TPR gap."""
-        from src.techniques.equal_opportunity import (
-            compute_tpr,
-            equal_opportunity_postprocessing,
+
+def test_compute_tpr_is_undefined_without_positive_labels() -> None:
+    assert np.isnan(compute_tpr(np.array([0, 0]), np.array([0, 1])))
+
+
+def test_tuning_reduces_validation_tpr_gap(biased_predictions) -> None:
+    info = tune_equal_opportunity(
+        y_val=biased_predictions["y_true"],
+        y_proba_val=biased_predictions["y_proba"],
+        sensitive_val=biased_predictions["sensitive"],
+    )
+    assert abs(info["tpr_priv_val"] - info["tpr_unpriv_after_val"]) < 0.1
+
+
+def test_frozen_threshold_application_does_not_accept_labels() -> None:
+    probabilities = np.array([0.8, 0.4, 0.45, 0.2])
+    sensitive = np.array(["Male", "Male", "Female", "Female"])
+    predictions = apply_thresholds(probabilities, sensitive, 0.5, 0.4)
+    assert predictions.tolist() == [1, 0, 1, 0]
+
+
+def test_threshold_tie_prefers_least_policy_change() -> None:
+    threshold, achieved = find_optimal_threshold(
+        y_true=np.array([1, 1, 1]),
+        y_proba=np.array([0.9, 0.8, 0.7]),
+        target_tpr=1.0,
+        search_range=(0.0, 0.5),
+        reference_threshold=0.5,
+    )
+    assert threshold == pytest.approx(0.5)
+    assert achieved == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize(
+    ("truth", "probability", "sensitive", "message"),
+    [
+        (np.array([1]), np.array([0.5, 0.6]), np.array(["Male"]), "equal lengths"),
+        (
+            np.array([1, 0]),
+            np.array([0.5, np.nan]),
+            np.array(["Male", "Female"]),
+            "finite",
+        ),
+        (
+            np.array([1, 0]),
+            np.array([0.5, 1.2]),
+            np.array(["Male", "Female"]),
+            "between 0 and 1",
+        ),
+    ],
+)
+def test_tuning_rejects_invalid_inputs(truth, probability, sensitive, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        equal_opportunity_postprocessing(truth, probability, sensitive)
+
+
+def test_tuning_rejects_non_estimable_group() -> None:
+    with pytest.raises(ValueError, match="Female.*no positive labels"):
+        tune_equal_opportunity(
+            y_val=np.array([1, 0, 0, 0]),
+            y_proba_val=np.array([0.8, 0.2, 0.3, 0.1]),
+            sensitive_val=np.array(["Male", "Male", "Female", "Female"]),
         )
 
-        y_true = biased_predictions["y_true"]
-        y_proba = biased_predictions["y_proba"]
-        sensitive = biased_predictions["sensitive"]
 
-        # Apply EO
-        y_pred_eo, info = equal_opportunity_postprocessing(
-            y_true=y_true,
-            y_pred_proba=y_proba,
-            sensitive_attr=sensitive,
+def test_application_rejects_unknown_group() -> None:
+    with pytest.raises(ValueError, match="Unexpected sensitive"):
+        apply_thresholds(
+            np.array([0.8, 0.6, 0.4]),
+            np.array(["Male", "Female", "Unknown"]),
+            0.5,
+            0.4,
         )
 
-        # Compute TPR gap after
-        male_mask = sensitive == "Male"
-        female_mask = sensitive == "Female"
 
-        tpr_male = compute_tpr(y_true[male_mask], y_pred_eo[male_mask])
-        tpr_female = compute_tpr(y_true[female_mask], y_pred_eo[female_mask])
-        gap_after = abs(tpr_male - tpr_female)
-
-        # Gap should be small after EO
-        assert gap_after < 0.1, f"TPR gap after EO is {gap_after}, expected < 0.1"
-
-    def test_returns_info_dict(self, biased_predictions):
-        """Test that info dict contains expected keys."""
-        from src.techniques.equal_opportunity import equal_opportunity_postprocessing
-
-        y_pred_eo, info = equal_opportunity_postprocessing(
-            y_true=biased_predictions["y_true"],
-            y_pred_proba=biased_predictions["y_proba"],
-            sensitive_attr=biased_predictions["sensitive"],
-        )
-
-        assert "tpr_priv" in info
-        assert "tpr_unpriv_before" in info
-        assert "tpr_unpriv_after" in info
-        assert "threshold_used" in info
-
-    def test_no_adjustment_when_equal(self):
-        """Test that no adjustment is made when TPRs are already equal."""
-        from src.techniques.equal_opportunity import equal_opportunity_postprocessing
-
-        np.random.seed(42)
-
-        # Equal TPR for both groups
-        y_true = np.concatenate([np.ones(50), np.ones(50)])
-        y_proba = np.concatenate(
-            [
-                np.random.uniform(0.6, 0.9, 50),
-                np.random.uniform(0.6, 0.9, 50),
-            ]
-        )
-        sensitive = np.array(["Male"] * 50 + ["Female"] * 50)
-
-        y_pred_eo, info = equal_opportunity_postprocessing(
-            y_true=y_true.astype(int),
-            y_pred_proba=y_proba,
-            sensitive_attr=sensitive,
-        )
-
-        # Threshold should be 0.5 if no adjustment needed
-        # or close to 0.5 if TPRs were already equal
-        assert info["threshold_used"] >= 0.4
-
-    def test_raises_on_missing_group(self):
-        """Test that ValueError is raised when a group is missing."""
-        from src.techniques.equal_opportunity import equal_opportunity_postprocessing
-
-        y_true = np.array([1, 1, 0, 0])
-        y_proba = np.array([0.8, 0.6, 0.3, 0.2])
-        sensitive = np.array(["Male", "Male", "Male", "Male"])  # No females
-
-        with pytest.raises(ValueError, match="unprivileged"):
-            equal_opportunity_postprocessing(
-                y_true=y_true,
-                y_pred_proba=y_proba,
-                sensitive_attr=sensitive,
-            )
-
-    def test_output_is_binary(self, biased_predictions):
-        """Test that output predictions are binary."""
-        from src.techniques.equal_opportunity import equal_opportunity_postprocessing
-
-        y_pred_eo, _ = equal_opportunity_postprocessing(
-            y_true=biased_predictions["y_true"],
-            y_pred_proba=biased_predictions["y_proba"],
-            sensitive_attr=biased_predictions["sensitive"],
-        )
-
-        unique_values = np.unique(y_pred_eo)
-        assert all(v in [0, 1] for v in unique_values)
-
-
-class TestEOLeakageGuard:
-    """Tests to guard against data leakage in EO post-processing.
-
-    Note: The current implementation has known leakage issues.
-    These tests document the expected behavior for the fixed version.
-    """
-
-    def test_tuning_should_use_validation_not_test(self):
-        """
-        Document that EO threshold tuning should NOT use test labels.
-
-        Current implementation violates this - threshold is tuned on
-        the same data it's evaluated on. This test documents the
-        expected behavior after PR7 fix.
-        """
-        # This is a documentation test - the fix is in PR7
-        # After fix: threshold should be tuned on val, applied to test
-        pass
-
-    def test_apply_thresholds_does_not_use_labels(self):
-        """Test that apply_thresholds function doesn't require labels."""
-        from src.fairness_project.fairness.postprocess import apply_thresholds
-
-        y_proba = np.array([0.8, 0.6, 0.3, 0.2, 0.7, 0.4])
-        sensitive = np.array(["Male", "Male", "Male", "Female", "Female", "Female"])
-
-        # Should work without y_true
-        y_pred = apply_thresholds(
-            y_pred_proba=y_proba,
-            sensitive_attr=sensitive,
-            threshold_priv=0.5,
-            threshold_unpriv=0.3,
-        )
-
-        assert len(y_pred) == len(y_proba)
-        assert all(v in [0, 1] for v in np.unique(y_pred))
+def test_no_adjustment_when_unprivileged_tpr_is_higher() -> None:
+    predictions, info = equal_opportunity_postprocessing(
+        y_true=np.array([1, 1, 1, 1, 0, 0]),
+        y_pred_proba=np.array([0.9, 0.4, 0.9, 0.8, 0.1, 0.2]),
+        sensitive_attr=np.array(["Male", "Male", "Female", "Female", "Male", "Female"]),
+    )
+    assert info["threshold_unpriv"] == pytest.approx(0.5)
+    assert set(np.unique(predictions)) <= {0, 1}

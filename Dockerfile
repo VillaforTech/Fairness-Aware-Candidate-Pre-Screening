@@ -1,47 +1,25 @@
-# Fairness Project API Dockerfile
-# ================================
-# Build and run the fairness API in a container
+ARG PYTHON_VERSION=3.12
+FROM python:${PYTHON_VERSION}-slim
 
-FROM python:3.11-slim
+COPY --from=ghcr.io/astral-sh/uv:0.9.21 /uv /uvx /bin/
+
+ENV PYTHONUNBUFFERED=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    RUN_DIR=/app/run \
+    LOG_LEVEL=INFO
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements and install dependencies
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
 
-# Install the package with API dependencies
-RUN pip install --no-cache-dir -e ".[api]"
+RUN uv sync --locked --no-dev --extra api --no-editable
 
-# Copy configs
-COPY configs/ ./configs/
-
-# Copy model if provided during build
-ARG MODEL_PATH=""
-COPY ${MODEL_PATH:-pyproject.toml} /app/model.joblib*
-
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV MODEL_PATH=/app/model.joblib
-ENV CONFIG_PATH=/app/configs/default.yaml
-ENV WORKERS=4
-ENV LOG_LEVEL=info
-
-# Expose port
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["/opt/venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
 
-# Run the API with gunicorn + uvicorn workers
-CMD gunicorn fairness_project.inference.api:app \
-    -w ${WORKERS} \
-    -k uvicorn.workers.UvicornWorker \
-    --bind 0.0.0.0:8000
+CMD ["/opt/venv/bin/uvicorn", "fairness_project.inference.api:app", "--host", "0.0.0.0", "--port", "8000"]

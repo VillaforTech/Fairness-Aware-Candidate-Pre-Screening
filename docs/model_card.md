@@ -1,141 +1,69 @@
-# Model Card: Fairness-Aware Candidate Pre-Screening
+# Model Card: UCI Adult Fairness Audit
 
-> The optional generator requires manually prepared `runs/<run_id>/run.json`
-> and `runs/<run_id>/metrics.json` files:
->
-> ```bash
-> python -m fairness_project.evaluation.model_card --run-id <run_id>
-> ```
->
-> This will overwrite this file. The documented leakage-free pipeline does not
-> create those run files automatically.
+> Generated from validated run `xgb-seed-42-v1`.
+> This is a benchmark evaluation artifact, not a hiring model.
 
-## Model Details
+## Provenance
 
-### Overview
+- Model: `xgb`
+- Created: 2026-08-28T22:40:08.399728+00:00
+- Git commit: `548223e92a62853c2a991f093a83a34c4fa44b6d`
+- Data SHA-256: `2496fc2982288003e36bdf8f2c41324e661ef959afe4151b2bfc70f2dc20e9f9`
+- Source SHA-256: `e65ff2d0205531f8c275bfdd9d9a99ce7eb3e2d3c181a711b1692fd0339dd62c`
+- Seed: 42
+- Dirty worktree recorded: True
 
-- **Model Name**: Fairness-Aware Income Classifier
-- **Version**: 0.1.0
-- **Model Type**: Binary Classification (XGBoost/Random Forest/Logistic Regression)
-- **Framework**: scikit-learn, XGBoost
+## Evaluation protocol
 
-### Intended Use
+- Dataset: UCI Adult (1994 Census income classification)
+- Validation: joint stratification by income, sex, and race_binary
+- Rows: 25,637 fit / 4,525 validation / 15,060 test
+- EO thresholds were tuned on validation labels only.
+- Final metrics were computed once on the preserved official test partition.
+- Protected attributes were excluded from model features.
+- Frozen offline thresholds: Male `0.500`, Female `0.405`.
 
-- **Primary Use**: Educational demonstration of fairness-aware ML pipelines
-- **Intended Users**: ML researchers, students, practitioners learning about algorithmic fairness
-- **Out-of-Scope Uses**: Employment screening or hiring decisions
+## Results
 
-### Model Architecture
+| Metric | Baseline | Offline adjusted | Change |
+|---|---:|---:|---:|
+| accuracy | 0.8694 | 0.8678 | -0.0016 |
+| precision | 0.7759 | 0.7641 | -0.0117 |
+| recall | 0.6586 | 0.6681 | +0.0095 |
+| f1 | 0.7125 | 0.7129 | +0.0004 |
+| SPD | 0.1754 | 0.1563 | -0.0191 |
+| DI | 0.3400 | 0.4120 | +0.0720 |
+| TPR_gap | 0.0504 | -0.0124 | -0.0628 |
 
-- **Preprocessing**: StandardScaler (numeric) + OneHotEncoder (categorical)
-- **Classifier Options**:
-  - Logistic Regression (max_iter=500)
-  - Random Forest (n_estimators=300)
-  - XGBoost (n_estimators=300, max_depth=4)
-- **Post-Processing**: Equal Opportunity threshold adjustment
+### Adjusted 95% paired-bootstrap intervals
 
-## Training Data
+| Metric | Lower | Upper |
+|---|---:|---:|
+| accuracy | 0.8630 | 0.8728 |
+| SPD | 0.1468 | 0.1670 |
+| DI | 0.3817 | 0.4370 |
+| TPR_gap | -0.0560 | 0.0268 |
 
-### Dataset
+## Experimental policy gate
 
-- **Source**: UCI Adult (Census Income) Dataset
-- **Size**: 48,842 raw rows; 45,222 after missing-value removal
-  (30,162 original-train + 15,060 original-test rows)
-- **Collection Date**: 1994 U.S. Census
-- **License**: CC BY 4.0
+**FAILED**
 
-### Features
+- DI=0.4120 < min_disparate_impact=0.8
+- |SPD|=0.1563 > max_spd=0.1
 
-- **Numeric (6)**: age, fnlwgt, education_num, capital_gain, capital_loss, hours_per_week
-- **Categorical (8)**: workclass, education, marital_status, occupation, relationship, race, sex, native_country
-- **Target**: income (>50K vs <=50K)
+## Serving boundary
 
-### Preprocessing
+The local API serves the baseline global threshold only. It does not apply the
+offline sex-specific thresholds. API responses name the policy and artifact ID
+so the offline fairness experiment cannot be mistaken for deployed behavior.
 
-- Missing values: Rows removed (~7.4% of raw rows)
-- Categorical encoding: One-hot encoding with unknown handling
-- Numeric scaling: Standardization (mean=0, std=1)
+## Limitations
 
-## Evaluation
+- Adult is a 1994 census-income dataset, not applicant or job-performance data.
+- Binary sex and race groupings erase identity and intersectional detail.
+- Bootstrap intervals describe test-sample uncertainty, not external validity.
+- Passing a configurable gate would not establish safety, legality, or validity.
 
-### Metrics
+## Authors
 
-#### Performance (Test Set)
-
-| Model | Accuracy | Precision | Recall | F1 |
-|-------|----------|-----------|--------|-----|
-| Logistic Regression | 0.8477 | 0.7322 | 0.5992 | 0.6590 |
-| Random Forest | 0.8441 | 0.7103 | 0.6170 | 0.6604 |
-| XGBoost | 0.8687 | 0.7723 | 0.6600 | 0.7117 |
-
-#### Fairness (Test Set, Before/After EO)
-
-| Model | SPD Before | SPD After | TPR Gap Before | TPR Gap After |
-|-------|------------|-----------|----------------|---------------|
-| Logistic Regression | 0.1764 | 0.1668 | 0.0713 | 0.0372 |
-| Random Forest | 0.1790 | 0.1731 | 0.0691 | 0.0421 |
-| XGBoost | 0.1760 | 0.1666 | 0.0584 | 0.0117 |
-
-### Evaluation Protocol
-
-- **Split**: 4,524 validation rows sampled from the 30,162 cleaned original
-  training rows, leaving 25,638 fit rows; 15,060 cleaned original test rows
-- **Leakage Prevention**: EO thresholds tuned on validation only
-- **Reporting**: Final metrics on held-out test set
-
-## Ethical Considerations
-
-### Fairness
-
-- **Reported Sensitive Attribute**: sex; race is retained in the data but was
-  not evaluated in the documented run
-- **Mitigation Applied**: Equal Opportunity post-processing
-- **Remaining Disparities**: SPD reduced but not eliminated
-
-### Limitations
-
-- Historical bias in training data (1994)
-- Binary groupings may oversimplify
-- No intersectionality analysis
-- Post-processing only, not in-processing
-
-### Potential Misuse
-
-- Must not be used to make employment or hiring decisions
-- Results may not generalize to modern populations
-- Binary classification may not capture nuance in income prediction
-
-## Usage
-
-### Installation
-
-```bash
-pip install -e "."
-```
-
-### Quick Start
-
-```bash
-fairness data preprocess
-PYTHONPATH=src:. python src/main_leakage_free.py --seed 42
-```
-
-### Citation
-
-When referring to the data, cite the UCI Adult dataset:
-
-```text
-Becker, B., & Kohavi, R. (1996). Adult [Dataset].
-UCI Machine Learning Repository. https://doi.org/10.24432/C5XW20
-```
-
-## Maintenance
-
-### Updates
-
-- Re-running the experiment on a different data context requires a fresh
-  evaluation; this repository does not define a real-world retraining policy.
-
-### Contact
-
-For issues or questions, see the project repository.
+Roberto Villafuerte and Charles Santhakumar, University of Helsinki collaboration.

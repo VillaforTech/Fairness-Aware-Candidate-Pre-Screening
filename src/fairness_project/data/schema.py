@@ -32,6 +32,21 @@ EXPECTED_COLUMNS = {
 }
 
 REQUIRED_COLUMNS = list(EXPECTED_COLUMNS.keys())
+FEATURE_COLUMNS = [
+    "age",
+    "workclass",
+    "fnlwgt",
+    "education",
+    "education_num",
+    "marital_status",
+    "occupation",
+    "relationship",
+    "native_country",
+    "capital_gain",
+    "capital_loss",
+    "hours_per_week",
+]
+SENSITIVE_COLUMNS = ["sex", "race", "race_binary"]
 
 # Valid values for categorical columns
 VALID_SEX = {"Male", "Female"}
@@ -238,21 +253,7 @@ def validate_inference_input(
         List of validation errors.
     """
     if required_columns is None:
-        # Feature columns (exclude target, split, sensitive)
-        required_columns = [
-            "age",
-            "workclass",
-            "fnlwgt",
-            "education",
-            "education_num",
-            "marital_status",
-            "occupation",
-            "relationship",
-            "native_country",
-            "capital_gain",
-            "capital_loss",
-            "hours_per_week",
-        ]
+        required_columns = FEATURE_COLUMNS
 
     errors = []
     missing = set(required_columns) - set(df.columns)

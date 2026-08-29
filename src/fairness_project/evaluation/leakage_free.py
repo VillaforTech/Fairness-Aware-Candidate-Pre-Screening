@@ -20,43 +20,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-
-def create_train_val_test_split(
-    df: pd.DataFrame,
-    val_ratio: float = 0.15,
-    random_state: int = 42,
-) -> pd.DataFrame:
-    """
-    Create train/val/test split from existing train/test split.
-
-    Takes a portion of training data for validation.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame with 'split' column containing 'train' and 'test'.
-    val_ratio : float
-        Ratio of training data to use for validation.
-    random_state : int
-        Random seed for reproducibility.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with updated 'split' column ('train', 'val', 'test').
-    """
-    df = df.copy()
-    np.random.seed(random_state)
-
-    train_mask = df["split"] == "train"
-    train_indices = df[train_mask].index.tolist()
-
-    n_val = int(len(train_indices) * val_ratio)
-    val_indices = np.random.choice(train_indices, size=n_val, replace=False)
-
-    df.loc[val_indices, "split"] = "val"
-
-    return df
+from fairness_project.data.split import create_train_val_test_split as create_train_val_test_split
 
 
 class LeakageFreeEvaluator:
@@ -75,6 +39,8 @@ class LeakageFreeEvaluator:
         privileged_value: str = "Male",
         unprivileged_value: str = "Female",
         base_threshold: float = 0.5,
+        n_thresholds: int = 101,
+        search_range: tuple[float, float] = (0.0, 0.5),
     ):
         """
         Initialize the evaluator.
@@ -94,6 +60,8 @@ class LeakageFreeEvaluator:
         self.privileged_value = privileged_value
         self.unprivileged_value = unprivileged_value
         self.base_threshold = base_threshold
+        self.n_thresholds = n_thresholds
+        self.search_range = search_range
 
         # Learned thresholds (set during tuning)
         self.threshold_priv: float | None = None
@@ -135,6 +103,8 @@ class LeakageFreeEvaluator:
             privileged_value=self.privileged_value,
             unprivileged_value=self.unprivileged_value,
             base_threshold=self.base_threshold,
+            n_thresholds=self.n_thresholds,
+            search_range=self.search_range,
         )
 
         self.threshold_priv = info["threshold_priv"]
@@ -294,6 +264,10 @@ def run_leakage_free_evaluation(
     # Get sensitive attributes for val and test
     df_val = df[df["split"] == "val"]
     df_test = df[df["split"] == "test"]
+    if not X_val.index.equals(df_val.index):
+        raise ValueError("X_val row indices do not align with validation sensitive attributes")
+    if not X_test.index.equals(df_test.index):
+        raise ValueError("X_test row indices do not align with test sensitive attributes")
 
     sensitive_val = df_val[sensitive_col].values
     sensitive_test = df_test[sensitive_col].values

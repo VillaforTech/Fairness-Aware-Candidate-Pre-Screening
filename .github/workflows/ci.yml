@@ -6,26 +6,123 @@ on:
   pull_request:
     branches: [main, master]
 
+env:
+  UV_VERSION: "0.9.21"
+
 jobs:
-  lint:
-    name: Lint
+  quality:
+    name: Quality and package integrity
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: ${{ env.UV_VERSION }}
+      - run: uv sync --locked --extra dev --extra api
+      - run: uv run ruff check src tests
+      - run: uv run ruff format --check src tests
+      - run: uv run mypy --config-file pyproject.toml
+      - name: Validate committed reference evidence
+        run: |
+          uv run python - <<'PY'
+          import json
+          from pathlib import Path
 
-      - name: Install ruff
-        run: pip install ruff
+          from fairness_project.governance.gate import check_gate
+          from fairness_project.provenance import source_sha256
 
-      - name: Run ruff check
-        run: ruff check src/ tests/
+          path = Path("reports/reference/xgb-seed-42-v1/report.json")
+          report = json.loads(path.read_text())
+          result = check_gate(report)
+          metadata = report["metadata"]
+          stored = report["governance"]
 
-      - name: Run ruff format check
-        run: ruff format --check src/ tests/
+          assert result.report_valid is True
+          assert result.passed is False
+          assert stored["report_valid"] is True
+          assert stored["passed"] is False
+          assert stored["violations"] == result.violations
+          assert metadata["source_sha256"] == source_sha256()
+          assert metadata["dirty_worktree"] is False
+          assert len(metadata["git_commit"]) == 40
+          PY
+      - name: Build wheel and source archive
+        run: uv build
+      - name: Verify distributions expose only the canonical package
+        run: |
+          python - <<'PY'
+          import glob
+          import sys
+          import tarfile
+          import zipfile
+
+          wheel, = glob.glob("dist/*.whl")
+          sdist, = glob.glob("dist/*.tar.gz")
+          legacy_prefixes = (
+              "metrics/",
+              "models/",
+              "plots/",
+              "preprocessing/",
+              "techniques/",
+              "utils/",
+          )
+          with zipfile.ZipFile(wheel) as archive:
+              wheel_leaks = sorted(
+                  name for name in archive.namelist() if name.startswith(legacy_prefixes)
+              )
+          legacy_source_fragments = tuple(f"/src/{prefix}" for prefix in legacy_prefixes)
+          with tarfile.open(sdist) as archive:
+              sdist_leaks = sorted(
+                  name
+                  for name in archive.getnames()
+                  if any(fragment in f"/{name}" for fragment in legacy_source_fragments)
+              )
+          if wheel_leaks or sdist_leaks:
+              print(
+                  "Legacy modules leaked into a distribution:",
+                  *wheel_leaks,
+                  *sdist_leaks,
+                  sep="\n",
+              )
+              sys.exit(1)
+          PY
+      - name: Verify packaged modules from outside the checkout
+        run: |
+          FAIRNESS_REPO_ROOT="$PWD"
+          FAIRNESS_SOURCE_SHA="$(uv run python -c 'from fairness_project.provenance import source_sha256; print(source_sha256())')"
+          python -m venv /tmp/fairness-wheel
+          /tmp/fairness-wheel/bin/pip install dist/*.whl
+          /tmp/fairness-wheel/bin/fairness data preprocess \
+            --input-dir "$FAIRNESS_REPO_ROOT/data/raw/adult" \
+            --output-path /tmp/fairness-wheel-data.csv
+          cd /tmp
+          /tmp/fairness-wheel/bin/python -c "from fairness_project.models.artifact import load_bundle"
+          /tmp/fairness-wheel/bin/python -c "from fairness_project.experiment import run_experiment"
+          /tmp/fairness-wheel/bin/fairness --help
+          /tmp/fairness-wheel/bin/fairness audit \
+            --model lr \
+            --seed 42 \
+            --data-path /tmp/fairness-wheel-data.csv \
+            --output-dir /tmp/fairness-wheel-runs \
+            --run-id installed-wheel \
+            --bootstrap-samples 0
+          FAIRNESS_SOURCE_SHA="$FAIRNESS_SOURCE_SHA" /tmp/fairness-wheel/bin/python - <<'PY'
+          import hashlib
+          import json
+          import os
+
+          with open("/tmp/fairness-wheel-runs/installed-wheel/report.json") as handle:
+              report = json.load(handle)
+          metadata = report["metadata"]
+          assert metadata["source_sha256"] == os.environ["FAIRNESS_SOURCE_SHA"]
+          assert metadata["source_sha256"] != hashlib.sha256(b"").hexdigest()
+          assert metadata["git_commit"] == "unavailable"
+          assert metadata["dirty_worktree"] is None
+          assert report["governance"]["report_valid"] is True
+          PY
 
   test:
     name: Test (Python ${{ matrix.python-version }})
@@ -34,100 +131,71 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: ${{ env.UV_VERSION }}
+      - run: uv sync --locked --python ${{ matrix.python-version }} --extra dev --extra api
+      - name: Run every test and report skips
+        run: uv run pytest tests -q -ra
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-
-      - name: Run tests
-        run: |
-          pytest tests/ -v --tb=short -x
-        env:
-          PYTHONPATH: src:.
-
-  import-check:
-    name: Import Check
+  reference-audit:
+    name: Real report and expected policy rejection
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-
-      - name: Install minimal dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install numpy pandas scikit-learn
-
-      - name: Check imports
-        run: |
-          export PYTHONPATH=src:.
-          python -c "from src.metrics.fairness import compute_fairness_metrics"
-          python -c "from src.preprocessing.preprocess import build_preprocessing_pipeline"
-          python -c "from src.fairness_project.config import Config"
-          echo "All imports successful!"
-
-  governance-gate:
-    name: Governance Gate
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v10
         with:
-          python-version: "3.11"
-
-      - name: Install dependencies
+          version: ${{ env.UV_VERSION }}
+      - run: uv sync --locked --extra dev --extra api
+      - name: Rebuild data from the bundled UCI files
+        run: >-
+          uv run fairness data preprocess
+          --input-dir data/raw/adult
+          --output-path /tmp/adult-model-ready.csv
+      - name: Generate a real leakage-free LR bundle
+        run: >-
+          uv run fairness audit
+          --model lr
+          --seed 42
+          --data-path /tmp/adult-model-ready.csv
+          --output-dir /tmp/fairness-runs
+          --run-id ci-lr
+          --bootstrap-samples 25
+      - name: Confirm the real run fails the default policy gate
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-
-      - name: Create sample report fixture
+          set +e
+          uv run fairness gate --report /tmp/fairness-runs/ci-lr/report.json
+          FAIRNESS_GATE_EXIT=$?
+          set -e
+          if [ "$FAIRNESS_GATE_EXIT" -ne 1 ]; then
+            echo "Expected a valid policy rejection (exit 1), got exit $FAIRNESS_GATE_EXIT"
+            exit 1
+          fi
+          echo "Gate correctly rejected the generated benchmark report"
+      - name: Serve the generated bundle in the matching runtime image
         run: |
-          cat > /tmp/sample_report.json << 'FIXTURE'
-          {
-            "metadata": {"run_id": "ci_test", "timestamp": "2024-01-01T00:00:00"},
-            "results": {
-              "metrics": {
-                "accuracy": 0.85,
-                "TPR_gap": 0.03,
-                "DI": 0.90,
-                "SPD": 0.05
-              }
-            }
-          }
-          FIXTURE
-
-      - name: Run governance gate (should pass)
-        run: |
-          python -m fairness_project.governance.gate --report /tmp/sample_report.json
-
-      - name: Verify gate rejects bad metrics
-        run: |
-          cat > /tmp/bad_report.json << 'FIXTURE'
-          {
-            "metadata": {"run_id": "ci_bad"},
-            "results": {
-              "metrics": {
-                "accuracy": 0.50,
-                "TPR_gap": 0.20,
-                "DI": 0.40,
-                "SPD": 0.30
-              }
-            }
-          }
-          FIXTURE
-          python -m fairness_project.governance.gate --report /tmp/bad_report.json && exit 1 || echo "Gate correctly rejected bad metrics"
+          docker build \
+            --build-arg PYTHON_VERSION=3.12 \
+            --tag fairness-audit-api:ci .
+          docker run --rm --detach \
+            --name fairness-ci-api \
+            --publish 127.0.0.1:8000:8000 \
+            --volume /tmp/fairness-runs/ci-lr:/app/run:ro \
+            fairness-audit-api:ci
+          trap 'docker stop fairness-ci-api >/dev/null 2>&1 || true' EXIT
+          for FAIRNESS_ATTEMPT in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/ready; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs fairness-ci-api
+          exit 1

@@ -1,31 +1,28 @@
-# Docker Compose for Fairness Project
-# ====================================
-
-version: '3.8'
-
 services:
   api:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        PYTHON_VERSION: ${FAIRNESS_PYTHON_VERSION:-3.12}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
-      # Mount models directory for easy model swapping
-      - ./models:/app/models:ro
-      # Mount runs directory for model registry access
-      - ./runs:/app/runs:ro
-      # Mount configs for override
-      - ./configs:/app/configs:ro
+      - type: bind
+        source: ${FAIRNESS_RUN_DIR:-./runs/local-xgb}
+        target: /app/run
+        read_only: true
     environment:
-      - MODEL_PATH=/app/models/model.joblib
-      - CONFIG_PATH=/app/configs/default.yaml
-      - WORKERS=4
-      - LOG_LEVEL=info
+      RUN_DIR: /app/run
+      LOG_LEVEL: INFO
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test:
+        - CMD
+        - /opt/venv/bin/python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
       start_period: 10s
     restart: unless-stopped

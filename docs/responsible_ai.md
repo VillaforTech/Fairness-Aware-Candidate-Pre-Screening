@@ -1,135 +1,123 @@
-# Responsible AI Protocol
+# Responsible AI protocol
 
-## Purpose
+## Purpose and boundary
 
-This document describes fairness checks implemented in an educational,
-hypothetical pre-screening scenario. It is not deployment guidance for an
-employment system.
+This repository studies a fairness intervention on UCI Adult, a 1994
+census-income dataset. It is a benchmark evaluation artifact, not a model of
+candidate quality and not a hiring system.
 
-## Fairness Goals
+## Question under study
 
-### Primary Objective
+The experiment asks a narrow question: on one fixed benchmark, what happens to
+measured sex-group disparities when the decision threshold for the lower-TPR
+group is reduced using validation labels only?
 
-Study measured group disparities in this dataset and scenario by:
+The implementation is best described as **one-sided opportunity uplift**. It
+keeps the Male threshold at `0.500` and may lower the Female threshold when the
+validation TPR is lower. If the Female validation TPR is already at least the
+Male TPR, it applies no adjustment. This is narrower than a general claim of
+fairness or full bidirectional equalized-odds optimization.
 
-1. Measuring disparities in model predictions
-2. Applying post-processing techniques to reduce unfair gaps
-3. Documenting trade-offs between accuracy and fairness
+## Protocol
 
-### Sensitive Attributes
+1. Rebuild the cleaned data from the bundled UCI train and test files.
+2. Preserve the official test partition.
+3. Draw validation rows only from the original training partition, jointly
+   stratified by income, sex, and binary race grouping.
+4. Fit preprocessing and the classifier on fit rows only.
+5. Tune the one-sided sex threshold on validation labels only.
+6. Freeze thresholds and evaluate baseline and adjusted predictions once on
+   the official test partition.
+7. Persist the full report, policy, manifest, model, predictions, hashes,
+   subgroup cells, and governance verdict as one versioned bundle.
 
-- **Reported run**: Sex (Male/Female)
-- **Available but not reported by the documented smoke run**: Race
-  (White/Non-White binary grouping)
+Protected attributes are retained for offline evaluation but excluded from the
+12 model features. The local API serves only the baseline `0.500` global
+threshold and does not accept `sex` or `race` as inputs.
 
-### Fairness Metrics Monitored
+## Measurements
 
-- **Statistical Parity Difference (SPD)**: Measures difference in positive prediction rates
-- **Disparate Impact (DI)**: Ratio of positive rates between groups
-- **Equal Opportunity (TPR Gap)**: Difference in true positive rates
+The report records:
 
-## Mitigation Techniques
+- accuracy, precision, recall, F1, ROC AUC, PR AUC, and Brier score;
+- statistical parity difference (SPD);
+- disparate impact (DI);
+- privileged and unprivileged true-positive rates and their gap;
+- per-group sample, positive-label, negative-label, predicted-positive, TPR,
+  and FPR diagnostics for sex, binary race, and their intersection;
+- paired, label-and-group-stratified bootstrap intervals for baseline,
+  adjusted, and change metrics.
 
-### Equal Opportunity Post-Processing
+An undefined rate is represented explicitly rather than silently replaced with
+zero. Small cells remain visible in the report and must be interpreted with
+caution.
 
-- Adjusts decision thresholds per group to equalize true positive rates
-- Thresholds are tuned on validation data to prevent test set leakage
-- Trade-off: May slightly reduce overall accuracy
+## Reference outcome
 
-### Implementation Protocol
+For XGBoost, seed 42, and 500 paired bootstrap replicates:
 
-1. **Train/Val/Test Split**: Separate validation set for threshold tuning
-2. **Threshold Tuning**: Done ONLY on validation data
-3. **Evaluation**: Final metrics computed on held-out test data
-4. **Documentation**: The script saves prediction and metric CSV files and
-   prints tuned thresholds to the terminal; it does not persist a complete run
-   manifest
+| Metric | Baseline | Offline adjusted | Change |
+|---|---:|---:|---:|
+| Accuracy | 0.8694 | 0.8678 | -0.0016 |
+| TPR gap | 0.0504 | -0.0124 | -0.0628 |
+| SPD | 0.1754 | 0.1563 | -0.0191 |
+| DI | 0.3400 | 0.4120 | +0.0720 |
 
-## Known Limitations
+The adjusted 95% bootstrap interval is `[-0.0560, 0.0268]` for TPR gap,
+`[0.1468, 0.1670]` for SPD, `[0.3817, 0.4370]` for DI, and
+`[0.8630, 0.8728]` for accuracy.
 
-### Data Limitations
+These results show a trade-off, not a success certificate. The default policy
+gate **fails** because DI remains below `0.80` and absolute SPD remains above
+`0.10`.
 
-- Historical bias: Data reflects 1994 census patterns
-- Binary groupings: Simplifies race to White/Non-White
-- Missing intersectional analysis: Does not examine combined effects
+## Experimental policy gate
 
-### Model Limitations
+| Check | Default |
+|---|---:|
+| Adjusted accuracy | at least 0.80 |
+| Accuracy drop from baseline | at most 0.02 |
+| Absolute TPR gap | at most 0.05 |
+| Disparate impact | 0.80 to 1.25 |
+| Absolute SPD | at most 0.10 |
 
-- Post-processing only: Does not address in-processing or pre-processing fairness
-- Binary classification: Limited to >50K income threshold
-- Static thresholds: May not adapt to distribution shifts
+The strict parser rejects missing, malformed, non-finite, Boolean, and
+out-of-domain metrics. CI rebuilds data, generates a real Logistic Regression
+report through the canonical pipeline, and confirms the expected gate
+rejection. Unit fixtures separately exercise pass and fail cases.
 
-### Evaluation Limitations
+A pass would mean only that these chosen numeric checks passed for one dataset,
+split, and model. It would not establish construct validity, job relatedness,
+external validity, legality, individual fairness, privacy, security, or safe
+operation.
 
-- Limited metrics: Does not include all possible fairness criteria
-- Single sensitive attribute at a time: No intersectionality support
-- Proxy discrimination: Does not detect indirect discrimination
+## Known limitations
 
-## Ethical Considerations
+- Adult predicts an income label, not qualification, performance, or hiring
+  outcomes.
+- Its 1994 data reflects historical conditions and structural inequities.
+- Binary sex and race encodings erase identities and within-group variation.
+- The threshold policy uses a protected attribute offline and could be unlawful
+  or inappropriate in a real decision process.
+- Post-processing cannot repair biased labels, missing constructs, proxy
+  discrimination, or data-collection harms.
+- One seed and one model do not establish intervention stability.
+- Bootstrap intervals capture test-sample uncertainty, not dataset shift or
+  external validity.
+- The repository has no stakeholder process, legal review, appeal mechanism,
+  monitoring operation, or accountable decision owner.
 
-### Potential Harms if Misused
+## Misuse prevention
 
-- The Adult target is income, not job qualification, so interpreting its output
-  as candidate quality would be invalid.
-- If repurposed for decisions about people, errors and historical bias could
-  deny opportunities or distribute them unevenly.
-- Equalizing one group metric does not establish individual fairness or remove
-  other forms of harm.
+Do not describe the output as candidate quality, use it to rank applicants, or
+deploy it for employment decisions. Any real project would require a valid and
+job-related target, representative prospective data, independent legal and
+domain review, affected-stakeholder participation, privacy and security
+engineering, human accountability, contestability, and validation in the
+intended context.
 
-### Requirements Before Any Real-World Project
+## Version
 
-This artifact should not be deployed for employment decisions. A separate
-real-world project would need, at minimum, a valid target and dataset,
-independent legal and domain review, affected-stakeholder input, security and
-privacy engineering, human accountability, contestability, and prospective
-validation in the intended context.
-
-## Compliance Considerations
-
-The repository makes no compliance claim and does not implement a compliance
-program. Applicable obligations vary by place, data, and use and can change;
-obtain current qualified advice before considering any real-world system.
-
-## Unimplemented Real-World Controls
-
-The repository contains experimental drift utilities, but it does not provide a
-validated monitoring service, alerting path, incident-response process, appeal
-mechanism, or accountable operating team.
-
-## Governance as Code
-
-The experimental gate compares supplied metrics with configured thresholds. A
-passing result does not establish that a model is suitable for deployment.
-
-### Experimental Threshold Fixture
-
-For demonstrations, the checker compares a supplied report with these defaults:
-
-| Check | Threshold |
-|-------|-----------|
-| Minimum accuracy | >= 0.80 |
-| Maximum TPR gap | <= 0.05 |
-| Minimum disparate impact | >= 0.80 |
-| Maximum SPD | <= 0.10 |
-
-### Automated CI Checks
-
-CI supplies fixed passing and failing fixtures to verify the checker. It does
-not train a model or gate a deployable artifact.
-
-### Configuration Changes
-
-There is no implemented approval or override workflow. Threshold changes are
-explicit experiment configuration and should be recorded with their rationale;
-changing them does not validate a model for use.
-
-For full governance documentation, see [Governance Gate Documentation](governance.md).
-
-## Version Control
-
-- **Current Version**: 0.1.0
-- **Last Updated**: 2026-08-28
-
-## Contact
-
-For questions about this responsible AI protocol, contact the project maintainers.
+- Project version: `0.2.0`
+- Reference run: `xgb-seed-42-v1`
+- Last updated: 2026-08-28

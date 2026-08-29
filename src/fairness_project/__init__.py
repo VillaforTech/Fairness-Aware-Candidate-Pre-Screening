@@ -1,3 +1,3 @@
-"""Educational fairness evaluation project using the UCI Adult dataset."""
+"""Reproducible fairness benchmark audit using the UCI Adult dataset."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

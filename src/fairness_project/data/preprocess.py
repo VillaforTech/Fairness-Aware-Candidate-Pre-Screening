@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from .download import COLUMN_NAMES
@@ -207,21 +206,13 @@ def create_validation_split(
     pd.DataFrame
         Dataframe with updated 'split' column (train/val/test).
     """
-    df = df.copy()
-    np.random.seed(random_state)
+    from fairness_project.data.split import create_train_val_test_split
 
-    # Only modify training data
-    train_mask = df["split"] == "train"
-    n_train = train_mask.sum()
-    n_val = int(n_train * val_size)
-
-    # Random selection for validation
-    train_indices = df[train_mask].index.tolist()
-    val_indices = np.random.choice(train_indices, size=n_val, replace=False)
-
-    df.loc[val_indices, "split"] = "val"
-
-    return df
+    return create_train_val_test_split(
+        df,
+        val_ratio=val_size,
+        random_state=random_state,
+    )
 
 
 def main() -> None:
