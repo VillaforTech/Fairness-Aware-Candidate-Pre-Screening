@@ -1,0 +1,501 @@
+{
+  "governance": {
+    "metrics_checked": {
+      "DI": 0.411995265638423,
+      "SPD": 0.1562874513228711,
+      "TPR_gap": -0.012393104051007353,
+      "accuracy": 0.8677954847277557,
+      "accuracy_drop": 0.0015936254980079,
+      "baseline_accuracy": 0.8693891102257636
+    },
+    "passed": false,
+    "report_valid": true,
+    "violations": [
+      "DI=0.4120 < min_disparate_impact=0.8",
+      "|SPD|=0.1563 > max_spd=0.1"
+    ]
+  },
+  "metadata": {
+    "data_path": "data/processed/adult/adult_model_ready.csv",
+    "data_sha256": "2496fc2982288003e36bdf8f2c41324e661ef959afe4151b2bfc70f2dc20e9f9",
+    "dependencies": {
+      "fairness-project": "0.2.0",
+      "joblib": "1.5.3",
+      "numpy": "2.2.6",
+      "pandas": "3.0.5",
+      "scikit-learn": "1.9.0",
+      "xgboost": "3.4.1"
+    },
+    "dirty_worktree": false,
+    "git_commit": "ff99209022ef1a893b1ff7e7046f33e3032c4dfb",
+    "model_type": "xgb",
+    "python_version": "3.12.11",
+    "run_id": "xgb-seed-42-v1",
+    "seed": 42,
+    "source_sha256": "80652e95250254609dad780cc7a6b88b9352959ef495369aa8033dbbe9d66b2c",
+    "timestamp": "2026-08-29T04:27:53.004336+00:00"
+  },
+  "protocol": {
+    "dataset": "UCI Adult (1994 Census income classification)",
+    "feature_columns": [
+      "age",
+      "workclass",
+      "fnlwgt",
+      "education",
+      "education_num",
+      "marital_status",
+      "occupation",
+      "relationship",
+      "native_country",
+      "capital_gain",
+      "capital_loss",
+      "hours_per_week"
+    ],
+    "final_evaluation_split": "test",
+    "official_test_partition_preserved": true,
+    "privileged_group": "Male",
+    "scope": "benchmark evaluation only; not a hiring validity study",
+    "sensitive_attribute": "sex",
+    "split_cell_counts": [
+      {
+        "income": "<=50K",
+        "n": 852,
+        "race_binary": "Non-White",
+        "sex": "Female",
+        "split": "test"
+      },
+      {
+        "income": "<=50K",
+        "n": 3504,
+        "race_binary": "White",
+        "sex": "Female",
+        "split": "test"
+      },
+      {
+        "income": "<=50K",
+        "n": 906,
+        "race_binary": "Non-White",
+        "sex": "Male",
+        "split": "test"
+      },
+      {
+        "income": "<=50K",
+        "n": 6098,
+        "race_binary": "White",
+        "sex": "Male",
+        "split": "test"
+      },
+      {
+        "income": ">50K",
+        "n": 73,
+        "race_binary": "Non-White",
+        "sex": "Female",
+        "split": "test"
+      },
+      {
+        "income": ">50K",
+        "n": 484,
+        "race_binary": "White",
+        "sex": "Female",
+        "split": "test"
+      },
+      {
+        "income": ">50K",
+        "n": 259,
+        "race_binary": "Non-White",
+        "sex": "Male",
+        "split": "test"
+      },
+      {
+        "income": ">50K",
+        "n": 2884,
+        "race_binary": "White",
+        "sex": "Male",
+        "split": "test"
+      },
+      {
+        "income": "<=50K",
+        "n": 1484,
+        "race_binary": "Non-White",
+        "sex": "Female",
+        "split": "train"
+      },
+      {
+        "income": "<=50K",
+        "n": 5885,
+        "race_binary": "White",
+        "sex": "Female",
+        "split": "train"
+      },
+      {
+        "income": "<=50K",
+        "n": 1542,
+        "race_binary": "Non-White",
+        "sex": "Male",
+        "split": "train"
+      },
+      {
+        "income": "<=50K",
+        "n": 10344,
+        "race_binary": "White",
+        "sex": "Male",
+        "split": "train"
+      },
+      {
+        "income": ">50K",
+        "n": 120,
+        "race_binary": "Non-White",
+        "sex": "Female",
+        "split": "train"
+      },
+      {
+        "income": ">50K",
+        "n": 825,
+        "race_binary": "White",
+        "sex": "Female",
+        "split": "train"
+      },
+      {
+        "income": ">50K",
+        "n": 449,
+        "race_binary": "Non-White",
+        "sex": "Male",
+        "split": "train"
+      },
+      {
+        "income": ">50K",
+        "n": 4988,
+        "race_binary": "White",
+        "sex": "Male",
+        "split": "train"
+      },
+      {
+        "income": "<=50K",
+        "n": 262,
+        "race_binary": "Non-White",
+        "sex": "Female",
+        "split": "val"
+      },
+      {
+        "income": "<=50K",
+        "n": 1039,
+        "race_binary": "White",
+        "sex": "Female",
+        "split": "val"
+      },
+      {
+        "income": "<=50K",
+        "n": 272,
+        "race_binary": "Non-White",
+        "sex": "Male",
+        "split": "val"
+      },
+      {
+        "income": "<=50K",
+        "n": 1826,
+        "race_binary": "White",
+        "sex": "Male",
+        "split": "val"
+      },
+      {
+        "income": ">50K",
+        "n": 21,
+        "race_binary": "Non-White",
+        "sex": "Female",
+        "split": "val"
+      },
+      {
+        "income": ">50K",
+        "n": 146,
+        "race_binary": "White",
+        "sex": "Female",
+        "split": "val"
+      },
+      {
+        "income": ">50K",
+        "n": 79,
+        "race_binary": "Non-White",
+        "sex": "Male",
+        "split": "val"
+      },
+      {
+        "income": ">50K",
+        "n": 880,
+        "race_binary": "White",
+        "sex": "Male",
+        "split": "val"
+      }
+    ],
+    "split_counts": {
+      "test": 15060,
+      "train": 25637,
+      "val": 4525
+    },
+    "threshold_tuning_split": "val",
+    "unprivileged_group": "Female",
+    "validation_ratio": 0.15,
+    "validation_strategy": "joint stratification by income, sex, and race_binary"
+  },
+  "results": {
+    "baseline_metrics": {
+      "DI": 0.3400109627201855,
+      "SPD": 0.1754203640035143,
+      "TPR_gap": 0.05044352072457614,
+      "TPR_priv": 0.6662424435252943,
+      "TPR_unpriv": 0.6157989228007181,
+      "accuracy": 0.8693891102257636,
+      "brier_score": 0.09063488990068436,
+      "f1": 0.7124689372898699,
+      "pr_auc": 0.8277579238777963,
+      "precision": 0.7758675581025152,
+      "recall": 0.6586486486486487,
+      "roc_auc": 0.9255768700038067
+    },
+    "metrics": {
+      "DI": 0.411995265638423,
+      "SPD": 0.1562874513228711,
+      "TPR_gap": -0.012393104051007353,
+      "TPR_priv": 0.6662424435252943,
+      "TPR_unpriv": 0.6786355475763016,
+      "accuracy": 0.8677954847277557,
+      "brier_score": 0.09063488990068436,
+      "f1": 0.7129055515501082,
+      "pr_auc": 0.8277579238777963,
+      "precision": 0.7641421947449768,
+      "recall": 0.6681081081081081,
+      "roc_auc": 0.9255768700038067
+    },
+    "subgroup_diagnostics": {
+      "adjusted": {
+        "race_binary": {
+          "Non-White": {
+            "fpr": 0.04607508532423208,
+            "n": 2090,
+            "negative_labels": 1758,
+            "positive_labels": 332,
+            "predicted_positive_rate": 0.1416267942583732,
+            "tpr": 0.6475903614457831
+          },
+          "White": {
+            "fpr": 0.07102686940220787,
+            "n": 12970,
+            "negative_labels": 9602,
+            "positive_labels": 3368,
+            "predicted_positive_rate": 0.2265998457979954,
+            "tpr": 0.6701306413301663
+          }
+        },
+        "sex": {
+          "Female": {
+            "fpr": 0.03673094582185491,
+            "n": 4913,
+            "negative_labels": 4356,
+            "positive_labels": 557,
+            "predicted_positive_rate": 0.10950539385304295,
+            "tpr": 0.6786355475763016
+          },
+          "Male": {
+            "fpr": 0.08609366076527698,
+            "n": 10147,
+            "negative_labels": 7004,
+            "positive_labels": 3143,
+            "predicted_positive_rate": 0.26579284517591406,
+            "tpr": 0.6662424435252943
+          }
+        },
+        "sex_x_race_binary": {
+          "Female x Non-White": {
+            "fpr": 0.036384976525821594,
+            "n": 925,
+            "negative_labels": 852,
+            "positive_labels": 73,
+            "predicted_positive_rate": 0.08216216216216216,
+            "tpr": 0.6164383561643836
+          },
+          "Female x White": {
+            "fpr": 0.036815068493150686,
+            "n": 3988,
+            "negative_labels": 3504,
+            "positive_labels": 484,
+            "predicted_positive_rate": 0.11584754262788365,
+            "tpr": 0.6880165289256198
+          },
+          "Male x Non-White": {
+            "fpr": 0.05518763796909492,
+            "n": 1165,
+            "negative_labels": 906,
+            "positive_labels": 259,
+            "predicted_positive_rate": 0.1888412017167382,
+            "tpr": 0.6563706563706564
+          },
+          "Male x White": {
+            "fpr": 0.09068547064611349,
+            "n": 8982,
+            "negative_labels": 6098,
+            "positive_labels": 2884,
+            "predicted_positive_rate": 0.2757737697617457,
+            "tpr": 0.6671289875173371
+          }
+        }
+      },
+      "baseline": {
+        "race_binary": {
+          "Non-White": {
+            "fpr": 0.03981797497155859,
+            "n": 2090,
+            "negative_labels": 1758,
+            "positive_labels": 332,
+            "predicted_positive_rate": 0.13492822966507176,
+            "tpr": 0.6385542168674698
+          },
+          "White": {
+            "fpr": 0.06602791085190585,
+            "n": 12970,
+            "negative_labels": 9602,
+            "positive_labels": 3368,
+            "predicted_positive_rate": 0.22043176561295297,
+            "tpr": 0.6606294536817102
+          }
+        },
+        "sex": {
+          "Female": {
+            "fpr": 0.023186409550045913,
+            "n": 4913,
+            "negative_labels": 4356,
+            "positive_labels": 557,
+            "predicted_positive_rate": 0.09037248117239975,
+            "tpr": 0.6157989228007181
+          },
+          "Male": {
+            "fpr": 0.08609366076527698,
+            "n": 10147,
+            "negative_labels": 7004,
+            "positive_labels": 3143,
+            "predicted_positive_rate": 0.26579284517591406,
+            "tpr": 0.6662424435252943
+          }
+        },
+        "sex_x_race_binary": {
+          "Female x Non-White": {
+            "fpr": 0.023474178403755867,
+            "n": 925,
+            "negative_labels": 852,
+            "positive_labels": 73,
+            "predicted_positive_rate": 0.06702702702702702,
+            "tpr": 0.5753424657534246
+          },
+          "Female x White": {
+            "fpr": 0.023116438356164382,
+            "n": 3988,
+            "negative_labels": 3504,
+            "positive_labels": 484,
+            "predicted_positive_rate": 0.09578736208625878,
+            "tpr": 0.621900826446281
+          },
+          "Male x Non-White": {
+            "fpr": 0.05518763796909492,
+            "n": 1165,
+            "negative_labels": 906,
+            "positive_labels": 259,
+            "predicted_positive_rate": 0.1888412017167382,
+            "tpr": 0.6563706563706564
+          },
+          "Male x White": {
+            "fpr": 0.09068547064611349,
+            "n": 8982,
+            "negative_labels": 6098,
+            "positive_labels": 2884,
+            "predicted_positive_rate": 0.2757737697617457,
+            "tpr": 0.6671289875173371
+          }
+        }
+      }
+    },
+    "thresholds": {
+      "privileged": 0.5,
+      "unprivileged": 0.405
+    },
+    "uncertainty": {
+      "confidence": 0.95,
+      "intervals": {
+        "adjusted": {
+          "DI": {
+            "lower": 0.38169062446897706,
+            "median": 0.41184820910130704,
+            "upper": 0.43697103257726255
+          },
+          "SPD": {
+            "lower": 0.14675334911424487,
+            "median": 0.15643402456111724,
+            "upper": 0.16703214828325266
+          },
+          "TPR_gap": {
+            "lower": -0.056006294229975044,
+            "median": -0.013154535084377195,
+            "upper": 0.026753904690312302
+          },
+          "accuracy": {
+            "lower": 0.8630461487383798,
+            "median": 0.8678618857901726,
+            "upper": 0.8727755644090306
+          }
+        },
+        "baseline": {
+          "DI": {
+            "lower": 0.31578620285094505,
+            "median": 0.33875655750718525,
+            "upper": 0.36415676936944535
+          },
+          "SPD": {
+            "lower": 0.16661446720988968,
+            "median": 0.17532726883467617,
+            "upper": 0.18487751776947264
+          },
+          "TPR_gap": {
+            "lower": 0.0044907437290470495,
+            "median": 0.05065944040245596,
+            "upper": 0.09400987118506203
+          },
+          "accuracy": {
+            "lower": 0.8646397742363878,
+            "median": 0.8693891102257636,
+            "upper": 0.8743027888446215
+          }
+        },
+        "change": {
+          "DI": {
+            "lower": 0.05820287042513049,
+            "median": 0.07168873722298535,
+            "upper": 0.08735588298715628
+          },
+          "SPD": {
+            "lower": -0.02300020354162427,
+            "median": -0.01892937105638104,
+            "upper": -0.01546916344392428
+          },
+          "TPR_gap": {
+            "lower": -0.08352782764811488,
+            "median": -0.0628366247755835,
+            "upper": -0.04308797127468589
+          },
+          "accuracy": {
+            "lower": -0.002855245683930918,
+            "median": -0.001527224435590946,
+            "upper": -0.00039840637450194727
+          }
+        }
+      },
+      "method": "paired stratified bootstrap over test rows",
+      "random_state": 42,
+      "samples": 500
+    },
+    "validation_tuning": {
+      "threshold_priv": 0.5,
+      "threshold_unpriv": 0.405,
+      "tpr_priv_val": 0.6579770594369134,
+      "tpr_unpriv_after_val": 0.6586826347305389,
+      "tpr_unpriv_before_val": 0.5688622754491018
+    }
+  },
+  "schema_version": "1.0"
+}
