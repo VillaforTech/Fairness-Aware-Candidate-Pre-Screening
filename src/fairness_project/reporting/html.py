@@ -1015,7 +1015,7 @@ def render_audit_html(report: dict[str, Any], stability: dict[str, Any] | None =
         _metric_card(key, label, hint, absolute, baseline, adjusted)
         for key, label, hint, absolute in _CORE_METRICS
     )
-    return f"""<!doctype html>
+    document = f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -1107,6 +1107,7 @@ def render_audit_html(report: dict[str, Any], stability: dict[str, Any] | None =
 </body>
 </html>
 """
+    return "\n".join(line.rstrip() for line in document.splitlines()) + "\n"
 
 
 def write_audit_html(

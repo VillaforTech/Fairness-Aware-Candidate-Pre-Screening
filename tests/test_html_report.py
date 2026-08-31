@@ -234,6 +234,7 @@ def test_optional_sections_degrade_explicitly_and_output_is_deterministic() -> N
     second = render_audit_html(report)
 
     assert first == second
+    assert all(line == line.rstrip() for line in first.splitlines())
     assert "No validation frontier is recorded" in first
     assert "No subgroup diagnostic cells are recorded" in first
     assert "No sampling-weight sensitivity is recorded" in first
