@@ -177,8 +177,8 @@ uv run fairness study \
   --seeds 0,1,2,3,4 \
   --data-path data/processed/adult/adult_model_ready.csv \
   --output-dir studies \
-  --study-id xgb-five-seed \
-  --bootstrap-samples 100
+  --study-id xgb-five-seed-v2 \
+  --bootstrap-samples 500
 ```
 
 `stability.json` records distributions and worst cases only after confirming
@@ -186,6 +186,11 @@ that data, source, model type and parameters, resolved configuration apart from
 per-run seed fields, protocol, feature contract, gate threshold policy, and
 metric coverage match across runs. The seeds share one official test partition,
 so this is a sensitivity study, not five independent population samples.
+
+[Open the committed five-seed audit](reports/reference/xgb-five-seed-v2/audit.html)
+or inspect its [reproduction notes](reports/reference/README.md). The configured
+governance gate rejected all five published runs; the audit keeps that verdict
+visible alongside the accuracy and disparity distributions.
 
 ## Compare offline monitoring snapshots
 

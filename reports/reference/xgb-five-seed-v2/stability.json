@@ -1,0 +1,623 @@
+{
+  "comparability": {
+    "data_sha256": "2496fc2982288003e36bdf8f2c41324e661ef959afe4151b2bfc70f2dc20e9f9",
+    "feature_contract": {
+      "columns": [
+        "age",
+        "workclass",
+        "education",
+        "education_num",
+        "marital_status",
+        "occupation",
+        "relationship",
+        "native_country",
+        "capital_gain",
+        "capital_loss",
+        "hours_per_week"
+      ],
+      "id": "adult-income-v2-no-census-weight"
+    },
+    "gate_thresholds": {
+      "max_accuracy_drop": 0.02,
+      "max_disparate_impact": 1.25,
+      "max_fpr_gap": 0.05,
+      "max_intersectional_fpr_span": 0.1,
+      "max_intersectional_tpr_span": 0.1,
+      "max_spd": 0.1,
+      "max_tpr_gap": 0.05,
+      "min_accuracy": 0.8,
+      "min_disparate_impact": 0.8
+    },
+    "model_parameters": {
+      "colsample_bytree": 0.8,
+      "learning_rate": 0.1,
+      "max_depth": 4,
+      "n_estimators": 300,
+      "n_jobs": -1,
+      "subsample": 0.8
+    },
+    "model_type": "xgb",
+    "protocol": {
+      "dataset": "UCI Adult (1994 Census income classification)",
+      "feature_columns": [
+        "age",
+        "workclass",
+        "education",
+        "education_num",
+        "marital_status",
+        "occupation",
+        "relationship",
+        "native_country",
+        "capital_gain",
+        "capital_loss",
+        "hours_per_week"
+      ],
+      "feature_contract_id": "adult-income-v2-no-census-weight",
+      "final_evaluation_split": "test",
+      "official_test_partition_preserved": true,
+      "privileged_group": "Male",
+      "sample_weight_column": "fnlwgt",
+      "sample_weight_used_as_predictor": false,
+      "scope": "benchmark evaluation only; not a hiring validity study",
+      "sensitive_attribute": "sex",
+      "split_cell_counts": [
+        {
+          "income": "<=50K",
+          "n": 852,
+          "race_binary": "Non-White",
+          "sex": "Female",
+          "split": "test"
+        },
+        {
+          "income": "<=50K",
+          "n": 3504,
+          "race_binary": "White",
+          "sex": "Female",
+          "split": "test"
+        },
+        {
+          "income": "<=50K",
+          "n": 906,
+          "race_binary": "Non-White",
+          "sex": "Male",
+          "split": "test"
+        },
+        {
+          "income": "<=50K",
+          "n": 6098,
+          "race_binary": "White",
+          "sex": "Male",
+          "split": "test"
+        },
+        {
+          "income": ">50K",
+          "n": 73,
+          "race_binary": "Non-White",
+          "sex": "Female",
+          "split": "test"
+        },
+        {
+          "income": ">50K",
+          "n": 484,
+          "race_binary": "White",
+          "sex": "Female",
+          "split": "test"
+        },
+        {
+          "income": ">50K",
+          "n": 259,
+          "race_binary": "Non-White",
+          "sex": "Male",
+          "split": "test"
+        },
+        {
+          "income": ">50K",
+          "n": 2884,
+          "race_binary": "White",
+          "sex": "Male",
+          "split": "test"
+        },
+        {
+          "income": "<=50K",
+          "n": 1484,
+          "race_binary": "Non-White",
+          "sex": "Female",
+          "split": "train"
+        },
+        {
+          "income": "<=50K",
+          "n": 5885,
+          "race_binary": "White",
+          "sex": "Female",
+          "split": "train"
+        },
+        {
+          "income": "<=50K",
+          "n": 1542,
+          "race_binary": "Non-White",
+          "sex": "Male",
+          "split": "train"
+        },
+        {
+          "income": "<=50K",
+          "n": 10344,
+          "race_binary": "White",
+          "sex": "Male",
+          "split": "train"
+        },
+        {
+          "income": ">50K",
+          "n": 120,
+          "race_binary": "Non-White",
+          "sex": "Female",
+          "split": "train"
+        },
+        {
+          "income": ">50K",
+          "n": 825,
+          "race_binary": "White",
+          "sex": "Female",
+          "split": "train"
+        },
+        {
+          "income": ">50K",
+          "n": 449,
+          "race_binary": "Non-White",
+          "sex": "Male",
+          "split": "train"
+        },
+        {
+          "income": ">50K",
+          "n": 4988,
+          "race_binary": "White",
+          "sex": "Male",
+          "split": "train"
+        },
+        {
+          "income": "<=50K",
+          "n": 262,
+          "race_binary": "Non-White",
+          "sex": "Female",
+          "split": "val"
+        },
+        {
+          "income": "<=50K",
+          "n": 1039,
+          "race_binary": "White",
+          "sex": "Female",
+          "split": "val"
+        },
+        {
+          "income": "<=50K",
+          "n": 272,
+          "race_binary": "Non-White",
+          "sex": "Male",
+          "split": "val"
+        },
+        {
+          "income": "<=50K",
+          "n": 1826,
+          "race_binary": "White",
+          "sex": "Male",
+          "split": "val"
+        },
+        {
+          "income": ">50K",
+          "n": 21,
+          "race_binary": "Non-White",
+          "sex": "Female",
+          "split": "val"
+        },
+        {
+          "income": ">50K",
+          "n": 146,
+          "race_binary": "White",
+          "sex": "Female",
+          "split": "val"
+        },
+        {
+          "income": ">50K",
+          "n": 79,
+          "race_binary": "Non-White",
+          "sex": "Male",
+          "split": "val"
+        },
+        {
+          "income": ">50K",
+          "n": 880,
+          "race_binary": "White",
+          "sex": "Male",
+          "split": "val"
+        }
+      ],
+      "split_counts": {
+        "test": 15060,
+        "train": 25637,
+        "val": 4525
+      },
+      "threshold_tuning_split": "val",
+      "unprivileged_group": "Female",
+      "validation_ratio": 0.15,
+      "validation_strategy": "joint stratification by income, sex, and race_binary"
+    },
+    "report_schema_version": "2.0",
+    "resolved_config": {
+      "data": {
+        "model_ready_path": "data/processed/adult/adult_model_ready.csv",
+        "processed_data_dir": "data/processed/adult",
+        "raw_data_dir": "data/raw/adult",
+        "test_size": 0.2,
+        "val_size": 0.15
+      },
+      "fairness": {
+        "eo_base_threshold": 0.5,
+        "eo_n_thresholds": 101,
+        "eo_search_range": [
+          0.0,
+          0.5
+        ],
+        "frontier_max_abs_tpr_gap": 0.05,
+        "frontier_max_accuracy_loss": 0.03,
+        "policy_attribute": "sex",
+        "privileged_value": "Male",
+        "review_max_automated_error": 0.1,
+        "review_min_automated_samples": 250,
+        "sensitive_attributes": [
+          "sex",
+          "race_binary"
+        ],
+        "subgroup_min_class_count": 20,
+        "subgroup_min_support": 50,
+        "unprivileged_value": "Female"
+      },
+      "model": {
+        "lr_max_iter": 500,
+        "model_type": "xgb",
+        "rf_max_depth": null,
+        "rf_n_estimators": 300,
+        "xgb_colsample_bytree": 0.8,
+        "xgb_learning_rate": 0.1,
+        "xgb_max_depth": 4,
+        "xgb_n_estimators": 300,
+        "xgb_subsample": 0.8
+      },
+      "n_jobs": -1,
+      "output": {
+        "metrics_dir": "data/metrics",
+        "models_dir": "models",
+        "plots_dir": "data/plots",
+        "predictions_dir": "data/predictions",
+        "runs_dir": "runs"
+      },
+      "schema_version": "2.0",
+      "verbose": true
+    },
+    "source_sha256": "b5ac8e62a921ff8fcbf97b81228338e62f90b78d7a02a30f60fc128f7c0ab7a7"
+  },
+  "conditions": {
+    "adjusted": {
+      "metrics": {
+        "DI": {
+          "count": 5,
+          "max": 0.41461010756158084,
+          "mean": 0.36191889590031584,
+          "median": 0.3657043841029401,
+          "min": 0.31424003834952474,
+          "q25": 0.3410367420137418,
+          "q75": 0.3740032074737918,
+          "std": 0.03360375604530086,
+          "values": [
+            0.3657043841029401,
+            0.3410367420137418,
+            0.41461010756158084,
+            0.3740032074737918,
+            0.31424003834952474
+          ]
+        },
+        "FPR_gap": {
+          "count": 5,
+          "max": 0.06465661233066872,
+          "mean": 0.054099874189693,
+          "median": 0.0605555843991024,
+          "min": 0.027442930420449763,
+          "q25": 0.054088598985021816,
+          "q75": 0.0637556448132223,
+          "std": 0.01383436011578455,
+          "values": [
+            0.054088598985021816,
+            0.0605555843991024,
+            0.027442930420449763,
+            0.06465661233066872,
+            0.0637556448132223
+          ]
+        },
+        "SPD": {
+          "count": 5,
+          "max": 0.18078327559032437,
+          "mean": 0.1644352022822017,
+          "median": 0.17540748593878816,
+          "min": 0.12357397749118891,
+          "q25": 0.1662783421983029,
+          "q75": 0.1761329301924041,
+          "std": 0.020964370746394845,
+          "values": [
+            0.1662783421983029,
+            0.17540748593878816,
+            0.12357397749118891,
+            0.1761329301924041,
+            0.18078327559032437
+          ]
+        },
+        "TPR_gap": {
+          "count": 5,
+          "max": 0.08487299867306508,
+          "mean": 0.037116821113974185,
+          "median": 0.036808021701641214,
+          "min": -0.023258205090563422,
+          "q25": 0.02224144046985954,
+          "q75": 0.06491984981586851,
+          "std": 0.0372026262396534,
+          "values": [
+            0.036808021701641214,
+            0.06491984981586851,
+            -0.023258205090563422,
+            0.02224144046985954,
+            0.08487299867306508
+          ]
+        },
+        "accuracy": {
+          "count": 5,
+          "max": 0.8709163346613545,
+          "mean": 0.8684462151394422,
+          "median": 0.8688579017264276,
+          "min": 0.8649402390438247,
+          "q25": 0.8678618857901726,
+          "q75": 0.8696547144754316,
+          "std": 0.0020181554011018286,
+          "values": [
+            0.8696547144754316,
+            0.8688579017264276,
+            0.8649402390438247,
+            0.8678618857901726,
+            0.8709163346613545
+          ]
+        }
+      },
+      "worst_absolute_gaps": {
+        "DI": {
+          "distance_from_parity": 0.6857599616504753,
+          "parity_target": 1.0,
+          "seed": 4,
+          "value": 0.31424003834952474
+        },
+        "FPR_gap": {
+          "distance_from_parity": 0.06465661233066872,
+          "parity_target": 0.0,
+          "seed": 3,
+          "value": 0.06465661233066872
+        },
+        "SPD": {
+          "distance_from_parity": 0.18078327559032437,
+          "parity_target": 0.0,
+          "seed": 4,
+          "value": 0.18078327559032437
+        },
+        "TPR_gap": {
+          "distance_from_parity": 0.08487299867306508,
+          "parity_target": 0.0,
+          "seed": 4,
+          "value": 0.08487299867306508
+        }
+      }
+    },
+    "baseline": {
+      "metrics": {
+        "DI": {
+          "count": 5,
+          "max": 0.34371697215607405,
+          "mean": 0.3391777599579912,
+          "median": 0.3410367420137418,
+          "min": 0.3301153180087623,
+          "q25": 0.33845371285317977,
+          "q75": 0.34256605475819807,
+          "std": 0.004861952315871989,
+          "values": [
+            0.34256605475819807,
+            0.3410367420137418,
+            0.33845371285317977,
+            0.3301153180087623,
+            0.34371697215607405
+          ]
+        },
+        "FPR_gap": {
+          "count": 5,
+          "max": 0.06086630806271531,
+          "mean": 0.06024989524548219,
+          "median": 0.06056685960377358,
+          "min": 0.05853155405359341,
+          "q25": 0.0605555843991024,
+          "q75": 0.06072917010822623,
+          "std": 0.0008667500066475307,
+          "values": [
+            0.06072917010822623,
+            0.0605555843991024,
+            0.05853155405359341,
+            0.06056685960377358,
+            0.06086630806271531
+          ]
+        },
+        "SPD": {
+          "count": 5,
+          "max": 0.1771923215201027,
+          "mean": 0.1757408793764433,
+          "median": 0.17540748593878816,
+          "min": 0.17500040269026385,
+          "q25": 0.17505191494916847,
+          "q75": 0.17605227178389343,
+          "std": 0.0008170408088835133,
+          "values": [
+            0.17500040269026385,
+            0.17540748593878816,
+            0.17505191494916847,
+            0.1771923215201027,
+            0.17605227178389343
+          ]
+        },
+        "TPR_gap": {
+          "count": 5,
+          "max": 0.07716900741495591,
+          "mean": 0.06678338515215194,
+          "median": 0.06491984981586851,
+          "min": 0.05837485598214598,
+          "q25": 0.062192864254497326,
+          "q75": 0.07126034829329198,
+          "std": 0.0066806190973142275,
+          "values": [
+            0.05837485598214598,
+            0.06491984981586851,
+            0.07126034829329198,
+            0.07716900741495591,
+            0.062192864254497326
+          ]
+        },
+        "accuracy": {
+          "count": 5,
+          "max": 0.8703187250996016,
+          "mean": 0.8696281540504648,
+          "median": 0.8695219123505976,
+          "min": 0.8688579017264276,
+          "q25": 0.8693891102257636,
+          "q75": 0.8700531208499336,
+          "std": 0.000513654172797181,
+          "values": [
+            0.8695219123505976,
+            0.8688579017264276,
+            0.8703187250996016,
+            0.8700531208499336,
+            0.8693891102257636
+          ]
+        }
+      },
+      "worst_absolute_gaps": {
+        "DI": {
+          "distance_from_parity": 0.6698846819912376,
+          "parity_target": 1.0,
+          "seed": 3,
+          "value": 0.3301153180087623
+        },
+        "FPR_gap": {
+          "distance_from_parity": 0.06086630806271531,
+          "parity_target": 0.0,
+          "seed": 4,
+          "value": 0.06086630806271531
+        },
+        "SPD": {
+          "distance_from_parity": 0.1771923215201027,
+          "parity_target": 0.0,
+          "seed": 3,
+          "value": 0.1771923215201027
+        },
+        "TPR_gap": {
+          "distance_from_parity": 0.07716900741495591,
+          "parity_target": 0.0,
+          "seed": 3,
+          "value": 0.07716900741495591
+        }
+      }
+    }
+  },
+  "distribution_semantics": "Quartiles use linear interpolation and std is the population standard deviation across the supplied seeds.",
+  "governance": {
+    "fail_count": 5,
+    "pass_count": 0,
+    "pass_rate": 0.0
+  },
+  "limitations": [
+    "All runs reuse the same official test partition. This study measures sensitivity to the training/validation split, model fitting, and policy selection across seeds; it does not estimate independent population uncertainty."
+  ],
+  "ranking_method": "Governance failures rank before passes, then larger adjusted parity deviation, lower adjusted accuracy, and finally lower seed.",
+  "report_count": 5,
+  "schema_version": "1.0",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "study_type": "repeated-seed-stability",
+  "thresholds": {
+    "privileged": {
+      "count": 5,
+      "max": 0.6,
+      "mean": 0.518,
+      "median": 0.51,
+      "min": 0.47000000000000003,
+      "q25": 0.5,
+      "q75": 0.51,
+      "std": 0.04354308211415447,
+      "values": [
+        0.51,
+        0.5,
+        0.6,
+        0.47000000000000003,
+        0.51
+      ]
+    },
+    "unprivileged": {
+      "count": 5,
+      "max": 0.55,
+      "mean": 0.492,
+      "median": 0.5,
+      "min": 0.42,
+      "q25": 0.48,
+      "q75": 0.51,
+      "std": 0.04261455150532505,
+      "values": [
+        0.48,
+        0.5,
+        0.51,
+        0.42,
+        0.55
+      ]
+    }
+  },
+  "worst_seed": 4,
+  "worst_seed_ranking": [
+    {
+      "adjusted_accuracy": 0.8709163346613545,
+      "adjusted_max_parity_deviation": 0.6857599616504753,
+      "gate_passed": false,
+      "rank": 1,
+      "seed": 4
+    },
+    {
+      "adjusted_accuracy": 0.8688579017264276,
+      "adjusted_max_parity_deviation": 0.6589632579862582,
+      "gate_passed": false,
+      "rank": 2,
+      "seed": 1
+    },
+    {
+      "adjusted_accuracy": 0.8696547144754316,
+      "adjusted_max_parity_deviation": 0.6342956158970599,
+      "gate_passed": false,
+      "rank": 3,
+      "seed": 0
+    },
+    {
+      "adjusted_accuracy": 0.8678618857901726,
+      "adjusted_max_parity_deviation": 0.6259967925262082,
+      "gate_passed": false,
+      "rank": 4,
+      "seed": 3
+    },
+    {
+      "adjusted_accuracy": 0.8649402390438247,
+      "adjusted_max_parity_deviation": 0.5853898924384191,
+      "gate_passed": false,
+      "rank": 5,
+      "seed": 2
+    }
+  ]
+}

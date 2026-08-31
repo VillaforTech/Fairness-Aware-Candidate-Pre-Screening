@@ -35,25 +35,65 @@ jobs:
         run: |
           uv run python - <<'PY'
           import json
+          import math
+          import statistics
           from pathlib import Path
 
           from fairness_project.governance.gate import check_gate
+          from fairness_project.monitoring import validate_snapshot
           from fairness_project.provenance import source_sha256
+          from fairness_project.reporting.html import render_audit_html
 
-          path = Path("reports/reference/xgb-seed-42-v1/report.json")
-          report = json.loads(path.read_text())
+          root = Path("reports/reference/xgb-five-seed-v2")
+          report = json.loads((root / "report.json").read_text())
+          stability = json.loads((root / "stability.json").read_text())
+          monitoring = json.loads((root / "monitoring.json").read_text())
+          audit_html = (root / "audit.html").read_text()
           result = check_gate(report)
           metadata = report["metadata"]
           stored = report["governance"]
 
           assert result.report_valid is True
           assert result.passed is False
-          assert stored["report_valid"] is True
-          assert stored["passed"] is False
-          assert stored["violations"] == result.violations
+          assert stored == result.to_dict()
+          validate_snapshot(monitoring)
           assert metadata["source_sha256"] == source_sha256()
           assert metadata["dirty_worktree"] is False
           assert len(metadata["git_commit"]) == 40
+          assert metadata["seed"] == stability["worst_seed"]
+          assert stability["schema_version"] == "1.0"
+          assert stability["study_type"] == "repeated-seed-stability"
+          assert stability["report_count"] == 5
+          assert stability["seeds"] == [0, 1, 2, 3, 4]
+          assert stability["governance"] == {
+              "pass_count": 0,
+              "fail_count": 5,
+              "pass_rate": 0.0,
+          }
+          assert stability["comparability"]["source_sha256"] == source_sha256()
+          assert stability["comparability"]["data_sha256"] == metadata["data_sha256"]
+          assert stability["worst_seed_ranking"][0]["seed"] == metadata["seed"]
+
+          distributions = [
+              *(
+                  stability["conditions"][condition]["metrics"][metric]
+                  for condition in ("baseline", "adjusted")
+                  for metric in ("accuracy", "SPD", "DI", "TPR_gap", "FPR_gap")
+              ),
+              stability["thresholds"]["privileged"],
+              stability["thresholds"]["unprivileged"],
+          ]
+          for distribution in distributions:
+              values = distribution["values"]
+              assert distribution["count"] == len(values) == 5
+              assert math.isclose(distribution["min"], min(values))
+              assert math.isclose(distribution["max"], max(values))
+              assert math.isclose(distribution["mean"], statistics.fmean(values))
+              assert math.isclose(distribution["median"], statistics.median(values))
+              assert math.isclose(distribution["std"], statistics.pstdev(values))
+
+          assert "<script" not in audit_html.lower()
+          assert render_audit_html(report, stability) == audit_html
           PY
       - name: Build wheel and source archive
         run: uv build
