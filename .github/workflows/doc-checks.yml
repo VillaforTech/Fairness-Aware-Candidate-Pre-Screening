@@ -6,12 +6,18 @@ on:
     paths:
       - "docs/**"
       - "README.md"
+      - "CONTRIBUTING.md"
+      - "SECURITY.md"
+      - "CHANGELOG.md"
       - "src/**/*.py"
       - ".github/**"
   pull_request:
     paths:
       - "docs/**"
       - "README.md"
+      - "CONTRIBUTING.md"
+      - "SECURITY.md"
+      - "CHANGELOG.md"
       - "src/**/*.py"
       - ".github/**"
 
@@ -28,6 +34,9 @@ jobs:
           globs: |
             docs/*.md
             README.md
+            CONTRIBUTING.md
+            SECURITY.md
+            CHANGELOG.md
 
   doc-coverage:
     name: Doc Coverage

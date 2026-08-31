@@ -8,12 +8,19 @@ from pathlib import Path
 
 REQUIRED_DOCS = [
     "README.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "docs/architecture.md",
+    "docs/methodology.md",
+    "docs/references.md",
     "docs/data.md",
     "docs/model_card.md",
     "docs/responsible_ai.md",
     "docs/api_spec.md",
     "docs/governance.md",
     "docs/deployment.md",
+    "docs/monitoring.md",
 ]
 
 MODULES_REQUIRING_DOCSTRINGS = [
@@ -21,6 +28,14 @@ MODULES_REQUIRING_DOCSTRINGS = [
     "src/fairness_project/cli.py",
     "src/fairness_project/inference/api.py",
     "src/fairness_project/governance/gate.py",
+    "src/fairness_project/data/quality.py",
+    "src/fairness_project/evaluation/intersectional.py",
+    "src/fairness_project/evaluation/overlap.py",
+    "src/fairness_project/evaluation/stability.py",
+    "src/fairness_project/fairness/frontier.py",
+    "src/fairness_project/fairness/selective.py",
+    "src/fairness_project/monitoring/snapshot.py",
+    "src/fairness_project/reporting/html.py",
 ]
 
 

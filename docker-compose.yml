@@ -15,6 +15,7 @@ services:
     environment:
       RUN_DIR: /app/run
       LOG_LEVEL: INFO
+      ALLOW_REJECTED_RESEARCH_BUNDLE: ${ALLOW_REJECTED_RESEARCH_BUNDLE:-0}
     healthcheck:
       test:
         - CMD

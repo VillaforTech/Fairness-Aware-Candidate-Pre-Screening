@@ -7,6 +7,9 @@ __pycache__/
 *.pyo
 *.pkl
 *.pickle
+.coverage
+coverage.xml
+htmlcov/
 
 # Virtual envs
 .env
@@ -103,6 +106,7 @@ data/external/
 # -----------------------------
 runs/
 !runs/.gitkeep
+studies/
 
 # -----------------------------
 # OS-specific

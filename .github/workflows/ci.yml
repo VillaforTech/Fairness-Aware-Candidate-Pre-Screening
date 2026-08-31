@@ -25,6 +25,12 @@ jobs:
       - run: uv run ruff check src tests
       - run: uv run ruff format --check src tests
       - run: uv run mypy --config-file pyproject.toml
+      - name: Enforce test coverage floor
+        run: >-
+          uv run pytest tests -q
+          --cov=src/fairness_project
+          --cov-report=term-missing:skip-covered
+          --cov-fail-under=80
       - name: Validate committed reference evidence
         run: |
           uv run python - <<'PY'
@@ -189,13 +195,22 @@ jobs:
             --name fairness-ci-api \
             --publish 127.0.0.1:8000:8000 \
             --volume /tmp/fairness-runs/ci-lr:/app/run:ro \
+            --env ALLOW_REJECTED_RESEARCH_BUNDLE=1 \
             fairness-audit-api:ci
           trap 'docker stop fairness-ci-api >/dev/null 2>&1 || true' EXIT
+          FAIRNESS_READY=0
           for FAIRNESS_ATTEMPT in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:8000/ready; then
-              exit 0
+              FAIRNESS_READY=1
+              break
             fi
             sleep 1
           done
-          docker logs fairness-ci-api
-          exit 1
+          if [ "$FAIRNESS_READY" -ne 1 ]; then
+            docker logs fairness-ci-api
+            exit 1
+          fi
+          curl --fail --silent \
+            --header 'Content-Type: application/json' \
+            --data '{"age":35,"workclass":"Private","education":"Bachelors","education_num":13,"marital_status":"Married-civ-spouse","occupation":"Exec-managerial","relationship":"Husband","native_country":"United-States","capital_gain":0,"capital_loss":0,"hours_per_week":40}' \
+            http://127.0.0.1:8000/v2/simulate

@@ -6,6 +6,8 @@ Supports loading from YAML files and environment variables.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import random
 from dataclasses import dataclass, field
@@ -74,14 +76,20 @@ class FairnessConfig:
 
     # Sensitive attributes
     sensitive_attributes: list[str] = field(default_factory=lambda: ["sex", "race_binary"])
-    privileged_groups: dict[str, str] = field(
-        default_factory=lambda: {"sex": "Male", "race_binary": "White"}
-    )
+    policy_attribute: str = "sex"
+    privileged_value: str = "Male"
+    unprivileged_value: str = "Female"
 
     # Equal Opportunity settings
     eo_base_threshold: float = 0.5
     eo_n_thresholds: int = 101
     eo_search_range: tuple[float, float] = (0.0, 0.5)
+    frontier_max_abs_tpr_gap: float = 0.05
+    frontier_max_accuracy_loss: float = 0.03
+    review_max_automated_error: float = 0.10
+    review_min_automated_samples: int = 250
+    subgroup_min_support: int = 50
+    subgroup_min_class_count: int = 20
 
 
 @dataclass
@@ -99,6 +107,7 @@ class OutputConfig:
 class Config:
     """Main configuration class."""
 
+    schema_version: str = "2.0"
     data: DataConfig = field(default_factory=DataConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     fairness: FairnessConfig = field(default_factory=FairnessConfig)
@@ -217,35 +226,93 @@ def config_from_dict(data: dict[str, Any]) -> Config:
     Config
         Configuration object.
     """
+    from dataclasses import fields
+
     config = Config()
+    allowed_top_level = {
+        "schema_version",
+        "data",
+        "model",
+        "fairness",
+        "output",
+        "seed",
+        "verbose",
+        "n_jobs",
+    }
+    unknown_top_level = sorted(set(data) - allowed_top_level)
+    if unknown_top_level:
+        raise ValueError(f"Unknown top-level configuration keys: {unknown_top_level}")
+    if data.get("schema_version", config.schema_version) != config.schema_version:
+        raise ValueError(f"Unsupported configuration schema: {data.get('schema_version')!r}")
 
-    # Update nested configs
-    if "data" in data:
-        for key, value in data["data"].items():
-            if hasattr(config.data, key):
-                setattr(config.data, key, value)
+    for section_name in ("data", "model", "fairness", "output"):
+        if section_name not in data:
+            continue
+        section_payload = data[section_name]
+        if not isinstance(section_payload, dict):
+            raise ValueError(f"Configuration section '{section_name}' must be an object")
+        section = getattr(config, section_name)
+        allowed = {item.name for item in fields(section)}
+        unknown = sorted(set(section_payload) - allowed)
+        if unknown:
+            raise ValueError(f"Unknown keys in configuration section '{section_name}': {unknown}")
+        for key, value in section_payload.items():
+            if section_name == "fairness" and key == "eo_search_range":
+                value = tuple(value)
+            setattr(section, key, value)
 
-    if "model" in data:
-        for key, value in data["model"].items():
-            if hasattr(config.model, key):
-                setattr(config.model, key, value)
-
-    if "fairness" in data:
-        for key, value in data["fairness"].items():
-            if hasattr(config.fairness, key):
-                setattr(config.fairness, key, value)
-
-    if "output" in data:
-        for key, value in data["output"].items():
-            if hasattr(config.output, key):
-                setattr(config.output, key, value)
-
-    # Update top-level settings
-    for key in ["seed", "verbose", "n_jobs"]:
+    for key in ("seed", "verbose", "n_jobs"):
         if key in data:
             setattr(config, key, data[key])
-
+    _validate_config(config)
     return config
+
+
+def _validate_config(config: Config) -> None:
+    """Reject semantically invalid settings before an experiment starts."""
+    if config.model.model_type not in {"lr", "rf", "xgb"}:
+        raise ValueError("model.model_type must be one of: lr, rf, xgb")
+    if not isinstance(config.seed, int) or isinstance(config.seed, bool) or config.seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    if not 0 < config.data.val_size < 1:
+        raise ValueError("data.val_size must be between 0 and 1")
+    if config.fairness.policy_attribute not in config.fairness.sensitive_attributes:
+        raise ValueError("fairness.policy_attribute must be listed in sensitive_attributes")
+    if config.fairness.privileged_value == config.fairness.unprivileged_value:
+        raise ValueError("privileged_value and unprivileged_value must differ")
+    search_range = config.fairness.eo_search_range
+    if len(search_range) != 2 or not 0 <= search_range[0] <= search_range[1] <= 1:
+        raise ValueError("fairness.eo_search_range must be an ordered pair within [0, 1]")
+    probabilities = {
+        "eo_base_threshold": config.fairness.eo_base_threshold,
+        "frontier_max_abs_tpr_gap": config.fairness.frontier_max_abs_tpr_gap,
+        "frontier_max_accuracy_loss": config.fairness.frontier_max_accuracy_loss,
+        "review_max_automated_error": config.fairness.review_max_automated_error,
+    }
+    for name, value in probabilities.items():
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 <= value <= 1:
+            raise ValueError(f"fairness.{name} must be within [0, 1]")
+    if config.fairness.eo_n_thresholds < 2:
+        raise ValueError("fairness.eo_n_thresholds must be at least 2")
+    if config.fairness.subgroup_min_support < 1:
+        raise ValueError("fairness.subgroup_min_support must be positive")
+    if config.fairness.subgroup_min_class_count < 1:
+        raise ValueError("fairness.subgroup_min_class_count must be positive")
+    if config.fairness.review_min_automated_samples < 1:
+        raise ValueError("fairness.review_min_automated_samples must be positive")
+
+
+def resolved_config(config: Config) -> dict[str, Any]:
+    """Return the canonical JSON-safe configuration recorded in every artifact."""
+    from dataclasses import asdict
+
+    return cast(dict[str, Any], _convert_tuples_to_lists(asdict(config)))
+
+
+def config_sha256(config: Config) -> str:
+    """Hash the fully resolved configuration, not only a user-supplied YAML file."""
+    payload = json.dumps(resolved_config(config), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def load_config(path: str | Path | None = None) -> Config:
@@ -305,6 +372,7 @@ def save_config(config: Config, path: str | Path) -> None:
     from dataclasses import asdict
 
     data = {
+        "schema_version": config.schema_version,
         "seed": config.seed,
         "verbose": config.verbose,
         "n_jobs": config.n_jobs,

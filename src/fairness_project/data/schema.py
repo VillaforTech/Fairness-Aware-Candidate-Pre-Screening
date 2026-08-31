@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 import pandas as pd
+from pandas.api.types import is_integer_dtype, is_object_dtype, is_string_dtype
 
 # Expected schema for model-ready data
 EXPECTED_COLUMNS = {
@@ -32,10 +33,11 @@ EXPECTED_COLUMNS = {
 }
 
 REQUIRED_COLUMNS = list(EXPECTED_COLUMNS.keys())
+FEATURE_CONTRACT_ID = "adult-income-v2-no-census-weight"
+SAMPLE_WEIGHT_COLUMN = "fnlwgt"
 FEATURE_COLUMNS = [
     "age",
     "workclass",
-    "fnlwgt",
     "education",
     "education_num",
     "marital_status",
@@ -46,7 +48,38 @@ FEATURE_COLUMNS = [
     "capital_loss",
     "hours_per_week",
 ]
+NUMERIC_FEATURE_COLUMNS = [
+    "age",
+    "education_num",
+    "capital_gain",
+    "capital_loss",
+    "hours_per_week",
+]
+CATEGORICAL_FEATURE_COLUMNS = [
+    "workclass",
+    "education",
+    "marital_status",
+    "occupation",
+    "relationship",
+    "native_country",
+]
+assert [
+    column for column in FEATURE_COLUMNS if column in set(NUMERIC_FEATURE_COLUMNS)
+] == NUMERIC_FEATURE_COLUMNS
+assert [
+    column for column in FEATURE_COLUMNS if column in set(CATEGORICAL_FEATURE_COLUMNS)
+] == CATEGORICAL_FEATURE_COLUMNS
+assert set(FEATURE_COLUMNS) == set(NUMERIC_FEATURE_COLUMNS) | set(CATEGORICAL_FEATURE_COLUMNS)
 SENSITIVE_COLUMNS = ["sex", "race", "race_binary"]
+INTEGER_COLUMNS = {
+    "age",
+    SAMPLE_WEIGHT_COLUMN,
+    "education_num",
+    "capital_gain",
+    "capital_loss",
+    "hours_per_week",
+}
+STRING_COLUMNS = set(REQUIRED_COLUMNS) - INTEGER_COLUMNS
 
 # Valid values for categorical columns
 VALID_SEX = {"Male", "Female"}
@@ -78,8 +111,25 @@ def validate_columns(df: pd.DataFrame) -> list[str]:
     errors = []
     missing = set(REQUIRED_COLUMNS) - set(df.columns)
     if missing:
-        errors.append(f"Missing columns: {missing}")
+        errors.append(f"Missing columns: {sorted(missing)}")
+    unexpected = set(df.columns) - set(REQUIRED_COLUMNS)
+    if unexpected:
+        errors.append(f"Unexpected columns: {sorted(unexpected)}")
 
+    return errors
+
+
+def validate_dtypes(df: pd.DataFrame) -> list[str]:
+    """Validate the exact integer and string families required by the data contract."""
+    errors: list[str] = []
+    for column in sorted(INTEGER_COLUMNS):
+        if column in df.columns and not is_integer_dtype(df[column].dtype):
+            errors.append(f"Column '{column}' must use an integer dtype")
+    for column in sorted(STRING_COLUMNS):
+        if column in df.columns and not (
+            is_object_dtype(df[column].dtype) or is_string_dtype(df[column].dtype)
+        ):
+            errors.append(f"Column '{column}' must use a string dtype")
     return errors
 
 
@@ -176,6 +226,7 @@ def validate_numeric_ranges(df: pd.DataFrame) -> list[str]:
 
     ranges = {
         "age": (0, 120),
+        SAMPLE_WEIGHT_COLUMN: (1, None),
         "education_num": (1, 20),
         "hours_per_week": (0, 168),
         "capital_gain": (0, None),
@@ -223,6 +274,7 @@ def validate_dataframe(
 
     all_errors.extend(validate_columns(df))
     all_errors.extend(validate_no_nulls(df))
+    all_errors.extend(validate_dtypes(df))
     all_errors.extend(validate_categorical_values(df))
     all_errors.extend(validate_numeric_ranges(df))
 

@@ -1,6 +1,7 @@
 """Tests for preprocessing pipeline."""
 
 import numpy as np
+import pytest
 
 
 class TestBuildPreprocessingPipeline:
@@ -29,6 +30,7 @@ class TestBuildPreprocessingPipeline:
         assert "sex" not in all_feature_cols
         assert "race" not in all_feature_cols
         assert "race_binary" not in all_feature_cols
+        assert "fnlwgt" not in all_feature_cols
         assert "income" not in all_feature_cols
         assert "split" not in all_feature_cols
 
@@ -87,6 +89,32 @@ class TestBuildPreprocessingPipeline:
         X_transformed = preprocess.transform(X_test)
 
         assert X_transformed.shape[0] == len(X_test)
+
+    def test_records_split_level_oov_evidence(self, sample_adult_data):
+        from fairness_project.features.preprocessing import categorical_oov_evidence
+
+        train = sample_adult_data.iloc[:400].copy()
+        validation = sample_adult_data.iloc[400:450].copy()
+        test = sample_adult_data.iloc[450:].copy()
+        validation.loc[validation.index[0], "occupation"] = "Never-seen-validation"
+        test.loc[test.index[:2], "native_country"] = "Never-seen-test"
+
+        evidence = categorical_oov_evidence(
+            train,
+            {"validation": validation, "test": test},
+        )
+
+        splits = evidence["splits"]
+        validation_evidence = splits["validation"]
+        test_evidence = splits["test"]
+        assert validation_evidence["rows_with_any_oov"] == 1
+        assert validation_evidence["columns"]["occupation"]["unknown_values"] == [
+            "Never-seen-validation"
+        ]
+        assert test_evidence["rows_with_any_oov"] == 2
+        assert test_evidence["columns"]["native_country"]["affected_share"] == pytest.approx(
+            2 / len(test)
+        )
 
 
 class TestPreprocessingConsistency:

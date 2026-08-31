@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from typer.testing import CliRunner
 
 import fairness_project.cli as cli
@@ -15,8 +16,18 @@ def test_help_exposes_supported_workflow_only() -> None:
     result = runner.invoke(cli.app, ["--help"])
     assert result.exit_code == 0
     assert "audit" in result.stdout
-    assert "predict" in result.stdout
+    assert "simulate" in result.stdout
+    assert "study" in result.stdout
+    assert "render-report" in result.stdout
+    assert "monitor" in result.stdout
     assert "mitigate" not in result.stdout
+
+
+def test_seed_parser_is_strict_and_deterministic() -> None:
+    assert cli._parse_seeds("7, 3,11") == [7, 3, 11]
+    for invalid in ("42", "1,1", "1,-2", "1,nope"):
+        with pytest.raises(cli.typer.BadParameter):
+            cli._parse_seeds(invalid)
 
 
 def test_audit_options_reach_experiment(monkeypatch, tmp_path) -> None:

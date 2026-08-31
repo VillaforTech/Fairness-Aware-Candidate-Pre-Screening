@@ -6,11 +6,49 @@ Handles loading raw data, cleaning, and creating the model-ready dataset.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
+import uuid
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
+from pandas.api.types import is_object_dtype, is_string_dtype
 
 from .download import COLUMN_NAMES
+from .quality import audit_processed_quality, audit_raw_attrition
+from .schema import validate_dataframe
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.parent / f".{path.name}.tmp-{uuid.uuid4().hex}"
+    try:
+        with temporary.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True, allow_nan=False)
+            handle.write("\n")
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _write_csv_atomic(path: Path, frame: pd.DataFrame) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.parent / f".{path.name}.tmp-{uuid.uuid4().hex}"
+    try:
+        frame.to_csv(temporary, index=False)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def load_raw_data(
@@ -77,12 +115,13 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     """
     df = df.copy()
 
-    # Drop rows with missing values
-    df = df.dropna()
+    # Normalize string missing markers before complete-case deletion. This also
+    # catches whitespace-padded question marks instead of silently retaining them.
+    for col in df.columns:
+        if is_object_dtype(df[col].dtype) or is_string_dtype(df[col].dtype):
+            df[col] = df[col].str.strip().replace({"?": pd.NA, "": pd.NA})
 
-    # Standardize string columns (strip whitespace)
-    for col in df.select_dtypes(include=["object"]).columns:
-        df[col] = df[col].str.strip()
+    df = df.dropna()
 
     # Ensure income is standardized
     df["income"] = df["income"].replace({">50K.": ">50K", "<=50K.": "<=50K"})
@@ -113,6 +152,7 @@ def prepare_model_ready_data(
     train_path: str | Path = "data/raw/adult/adult.data",
     test_path: str | Path = "data/raw/adult/adult.test",
     output_path: str | Path = "data/processed/adult/adult_model_ready.csv",
+    quality_report_path: str | Path | None = None,
     verbose: bool = True,
 ) -> pd.DataFrame:
     """
@@ -138,6 +178,7 @@ def prepare_model_ready_data(
         print(f"Loading raw data from {train_path} and {test_path}...")
 
     df_train, df_test = load_raw_data(train_path, test_path)
+    raw_quality = audit_raw_attrition(df_train, df_test)
 
     if verbose:
         print(f"Raw train shape: {df_train.shape}")
@@ -163,14 +204,45 @@ def prepare_model_ready_data(
 
     # Create binary race
     df = create_binary_race(df)
+    validate_dataframe(df)
+    processed_quality = audit_processed_quality(df)
 
-    # Save
+    # Save the data and its semantics report as deterministic, replace-only artifacts.
     output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(output_path, index=False)
+    _write_csv_atomic(output_path, df)
+    resolved_quality_path = (
+        Path(quality_report_path)
+        if quality_report_path is not None
+        else output_path.with_suffix(".quality.json")
+    )
+    _write_json_atomic(
+        resolved_quality_path,
+        {
+            "schema_version": "1.0",
+            "audit_type": "adult_preprocessing_evidence",
+            "raw": raw_quality,
+            "processed": processed_quality,
+            "model_ready": {
+                "filename": output_path.name,
+                "sha256": _sha256_file(output_path),
+                "row_count": len(df),
+            },
+            "sources": {
+                "train": {
+                    "filename": Path(train_path).name,
+                    "sha256": _sha256_file(Path(train_path)),
+                },
+                "test": {
+                    "filename": Path(test_path).name,
+                    "sha256": _sha256_file(Path(test_path)),
+                },
+            },
+        },
+    )
 
     if verbose:
         print(f"\nModel-ready data saved to: {output_path}")
+        print(f"Data-semantics evidence saved to: {resolved_quality_path}")
         print(f"Total samples: {len(df)}")
         print(f"Train samples: {(df['split'] == 'train').sum()}")
         print(f"Test samples: {(df['split'] == 'test').sum()}")
@@ -237,6 +309,11 @@ def main() -> None:
         help="Output path for processed data",
     )
     parser.add_argument(
+        "--quality-report-path",
+        default=None,
+        help="Output path for the data-semantics JSON sidecar",
+    )
+    parser.add_argument(
         "--quiet",
         "-q",
         action="store_true",
@@ -248,6 +325,7 @@ def main() -> None:
         train_path=args.train_path,
         test_path=args.test_path,
         output_path=args.output_path,
+        quality_report_path=args.quality_report_path,
         verbose=not args.quiet,
     )
 

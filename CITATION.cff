@@ -1,9 +1,9 @@
 cff-version: 1.2.0
-message: "If you use this benchmark audit, cite the repository and the UCI Adult dataset."
-title: "Fairness-Aware Candidate Pre-Screening: UCI Adult Fairness Audit"
+message: "If you use this policy lab, cite the repository and the UCI Adult dataset."
+title: "Auditable Fair-ML Policy Lab"
 type: software
-version: 0.2.0
-date-released: 2026-08-28
+version: 0.3.0
+date-released: 2026-08-30
 authors:
   - family-names: Villafuerte
     given-names: Roberto

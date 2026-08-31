@@ -1,95 +1,88 @@
-# CLAUDE.md
+# Repository guidance
 
-This file provides repository guidance for coding agents.
+## Project contract
 
-## Project Overview
+This repository is the Auditable Fair-ML Policy Lab. It studies policy trade-offs on
+the UCI Adult Census-income benchmark. Adult is not applicant or job-performance
+data, and no result here validates an employment decision system.
 
-Reproducible fairness benchmark audit using the Adult (Census Income) dataset. It evaluates an offline Equal Opportunity post-processing policy with a leakage-free protocol. Protected attributes are sex and binary race. Adult is not applicant or job-performance data, so this repository does not validate a hiring system and must not be used for employment decisions.
+Only `src/fairness_project/` is supported. Historical notebooks, flat scripts, and
+alternate training paths were removed in v0.3 and remain recoverable from the
+`coursework-v0.2` tag.
 
-## Common Commands
+## Required commands
 
 ```bash
-# Install the locked development environment
 uv sync --locked --extra dev --extra api
-
-# Run tests (PYTHONPATH is configured in pyproject.toml)
-uv run pytest tests -q -ra
-
-# Run a single test file
-uv run pytest tests/test_fairness_metrics.py -v
-
-# Run a single test
-uv run pytest tests/test_fairness_metrics.py::test_function_name -v
-
-# Test with coverage
-uv run pytest tests --cov=src/fairness_project --cov-report=html
-
-# Lint and format
 uv run ruff check src tests
 uv run ruff format --check src tests
-
-# Type check
 uv run mypy --config-file pyproject.toml
-
-# CLI
-uv run fairness --help
-uv run fairness data preprocess --input-dir data/raw/adult --output-path data/processed/adult/adult_model_ready.csv
-uv run fairness audit --model xgb --seed 42 --data-path data/processed/adult/adult_model_ready.csv --output-dir runs --run-id xgb-seed-42
-uv run fairness gate --report runs/xgb-seed-42/report.json
-
-# API server
-RUN_DIR=runs/xgb-seed-42 uv run uvicorn fairness_project.inference.api:app --host 127.0.0.1 --port 8000
-
-# Docker
-docker compose up --build
+uv run pytest tests -q -ra
+uv build
 ```
 
-## Architecture
+Real workflow:
 
-The project has two code paths under `src/`: historical flat prototype modules and the supported `src/fairness_project/` package. Only the supported package is built, tested, and used by the CLI.
+```bash
+uv run fairness data preprocess \
+  --input-dir data/raw/adult \
+  --output-path data/processed/adult/adult_model_ready.csv
 
-### Modern Package (`src/fairness_project/`)
+uv run fairness audit \
+  --model xgb \
+  --seed 42 \
+  --data-path data/processed/adult/adult_model_ready.csv \
+  --output-dir runs \
+  --run-id xgb-seed-42
 
-| Module | Purpose |
-|--------|---------|
-| `config.py` | Dataclass + Pydantic config system, loads from `configs/default.yaml`, global singleton |
-| `cli.py` | Typer-based CLI entry point (registered as `fairness` console script) |
-| `data/` | UCI Adult dataset download and preprocessing |
-| `features/` | Sklearn preprocessing pipeline (StandardScaler + OneHotEncoder) |
-| `models/` | Train LR/RF/XGBoost; validated artifact persistence |
-| `metrics/fairness.py` | SPD, Disparate Impact, TPR/FPR gap calculations |
-| `metrics/performance.py` | Accuracy, precision, recall, F1 |
-| `fairness/postprocess.py` | Equal Opportunity threshold tuning per group |
-| `evaluation/` | Diagnostics, uncertainty intervals, and report generation |
-| `inference/` | FastAPI REST API + batch prediction with Pydantic schemas |
-| `monitoring/drift.py` | PSI, KS statistic, fairness drift detection |
-
-### Data Flow
-
-```
-Raw data -> preprocess -> split (fit/validation/preserved test)
--> fit preprocessing and classifier -> validation-only policy tuning
--> frozen policy -> paired test evaluation -> report and gate verdict
--> validated bundle -> baseline-only API and batch inference
+uv run fairness study \
+  --model xgb \
+  --seeds 0,1,2,3,4 \
+  --data-path data/processed/adult/adult_model_ready.csv \
+  --output-dir studies \
+  --study-id xgb-five-seed
 ```
 
-### Critical: Leakage-Free Protocol
+## Architecture invariants
 
-EO thresholds are tuned **only on the validation set**. Final metrics are computed on the held-out test set. This prevents optimistic bias in fairness metric reporting. See `evaluation/leakage_free.py`.
+- Preserve the official UCI test partition. Fit the model on fit rows and select
+  policies on validation rows only.
+- The model contract has exactly 11 features. Sex, race, `race_binary`, `fnlwgt`,
+  target, and split markers never enter the scoring plane.
+- `fnlwgt` is the Census final sampling weight. Use it only for clearly labelled
+  weighted sensitivity, never as a predictor or primary gate input.
+- The two-dimensional group-threshold Pareto policy is offline-only. The simulator
+  accepts no protected attributes and serves only the global review band.
+- Keep undefined and small-cell metrics explicit. Never coerce a missing denominator
+  to zero or hide a limited evidence state.
+- Exact-overlap sensitivity compares canonical feature tuples, excludes labels and
+  audit fields from identity, and never retrains or retunes on held-out rows.
+- The governance gate distinguishes pass, valid rejection, and malformed evidence.
+  Preserve failed gates as results.
+- Every run publishes atomically and binds seven files: `model.joblib`,
+  `manifest.json`, `policy.json`, `predictions.csv`, `report.json`, `audit.html`, and
+  aggregate-only `monitoring.json`.
+- A rejected run requires an explicit research override for local simulation.
+- Do not describe benchmark parity as legal compliance, job relatedness, external
+  validity, causal fairness, or deployment safety.
 
-## Configuration
+## Module map
 
-YAML-based config at `configs/default.yaml`. Nested dataclasses cover data, model, fairness, and output settings. Seed 42 is the default and is propagated through the supported pipeline.
+| Module | Responsibility |
+|---|---|
+| `data/` | UCI loading, raw attrition evidence, strict schema, and split contract |
+| `features/` | Exact 11-feature preprocessing |
+| `models/` | Classifier training and integrity-bound artifacts |
+| `fairness/` | Offline Pareto search and global selective review |
+| `evaluation/` | Metrics, bootstrap, intersectional evidence, exact overlap, and stability |
+| `governance/` | Strict report validation and fail-closed criteria |
+| `monitoring/` | Aggregate snapshots and tri-state offline drift comparison |
+| `inference/` | Shared simulation service, v2 HTTP API, and CSV path |
+| `reporting/` | Self-contained HTML evidence report |
 
-## CI
+## Evidence updates
 
-GitHub Actions runs lint, formatting, MyPy, tests on Python 3.10/3.11/3.12, package-integrity checks, an installed-wheel audit, a real report with expected policy rejection, and a container readiness probe.
-
-## Key Constraints
-
-- **Offline post-processing only**: mitigation is threshold adjustment, not in-processing
-- **Models**: Logistic Regression, Random Forest, XGBoost
-- **Fairness metrics**: SPD (ideal: 0), Disparate Impact (ideal: 1.0), TPR Gap (ideal: 0)
-- **Serving boundary**: the API uses one global 0.5 threshold and never applies group-specific thresholds
-- **Evidence boundary**: lower benchmark gaps do not establish job relatedness, legal compliance, external validity, or safety
-- **Ruff config**: line length 100, Python 3.10+ target, rules E/W/F/I/B/C4/UP
+Generate reference evidence from a clean source commit so `git_commit`,
+`dirty_worktree`, and `source_sha256` remain meaningful. Commit source first, run the
+study outside the checkout, then commit the curated evidence in a second commit. A
+manifest hash is an integrity check, not a cryptographic signature.

@@ -1,69 +1,244 @@
-# Model Card: UCI Adult Fairness Audit
+# System Card: Auditable Fair-ML Policy Lab
 
-> Generated from validated run `xgb-seed-42-v1`.
-> This is a benchmark evaluation artifact, not a hiring model.
+This document describes the stable system contract. Each audit bundle also
+contains run-specific evidence in `report.json`, `manifest.json`, `audit.html`,
+and `monitoring.json`. A generated card can be produced from the same
+integrity-validated bundle, so metrics never need to be copied by hand.
 
-## Provenance
+## System purpose
 
-- Model: `xgb`
-- Created: 2026-08-28T22:40:08.399728+00:00
-- Git commit: `548223e92a62853c2a991f093a83a34c4fa44b6d`
-- Data SHA-256: `2496fc2982288003e36bdf8f2c41324e661ef959afe4151b2bfc70f2dc20e9f9`
-- Source SHA-256: `e65ff2d0205531f8c275bfdd9d9a99ce7eb3e2d3c181a711b1692fd0339dd62c`
-- Seed: 42
-- Dirty worktree recorded: True
+The lab evaluates an Adult-income classifier, an offline group-threshold policy,
+and a separate global review-band policy. It is designed to make policy search,
+uncertainty, subgroup evidence, stability, governance, and artifact provenance
+inspectable in one workflow.
 
-## Evaluation protocol
+The target is the UCI Adult `>50K` label. The system does not measure candidate
+quality, qualification, suitability, work performance, or hiring success.
 
-- Dataset: UCI Adult (1994 Census income classification)
-- Validation: joint stratification by income, sex, and race_binary
-- Rows: 25,637 fit / 4,525 validation / 15,060 test
-- EO thresholds were tuned on validation labels only.
-- Final metrics were computed once on the preserved official test partition.
-- Protected attributes were excluded from model features.
-- Frozen offline thresholds: Male `0.500`, Female `0.405`.
+## Data
 
-## Results
+- Source: UCI Adult, derived from 1994 US Census data
+- Original task: binary income classification
+- Preserved evaluation partition: UCI's official test file
+- Validation draw: original training rows, jointly stratified by income, sex,
+  and `race_binary`
+- Protected audit fields: sex, original UCI race, and derived `race_binary`
+- Sampling weight: `fnlwgt`, excluded from predictors and used only for
+  weighted sensitivity
+- Complete-case attrition: 3,620 of 48,842 raw rows, or 7.41%
+- Data-semantics evidence: digest-bound raw and processed attrition,
+  missingness, composition, duplicate, conflict, and split-overlap audits
 
-| Metric | Baseline | Offline adjusted | Change |
-|---|---:|---:|---:|
-| accuracy | 0.8694 | 0.8678 | -0.0016 |
-| precision | 0.7759 | 0.7641 | -0.0117 |
-| recall | 0.6586 | 0.6681 | +0.0095 |
-| f1 | 0.7125 | 0.7129 | +0.0004 |
-| SPD | 0.1754 | 0.1563 | -0.0191 |
-| DI | 0.3400 | 0.4120 | +0.0720 |
-| TPR_gap | 0.0504 | -0.0124 | -0.0628 |
+See [`data.md`](data.md) for lineage and limitations.
 
-### Adjusted 95% paired-bootstrap intervals
+## Model contract
 
-| Metric | Lower | Upper |
-|---|---:|---:|
-| accuracy | 0.8630 | 0.8728 |
-| SPD | 0.1468 | 0.1670 |
-| DI | 0.3817 | 0.4370 |
-| TPR_gap | -0.0560 | 0.0268 |
+Contract ID: `adult-income-v2-no-census-weight`
 
-## Experimental policy gate
+The ordered 11 features are:
 
-### Verdict: rejected
+```text
+age, workclass, education, education_num, marital_status, occupation,
+relationship, native_country, capital_gain, capital_loss, hours_per_week
+```
 
-- DI=0.4120 < min_disparate_impact=0.8
-- |SPD|=0.1563 > max_spd=0.1
+Numeric fields are standardized and categorical fields are one-hot encoded in
+one fitted pipeline. Protected attributes, target, split marker, and `fnlwgt`
+are excluded. The artifact loader checks the contract against the fitted model.
 
-## Serving boundary
+The five numeric fields, in transformer order, are `age`, `education_num`,
+`capital_gain`, `capital_loss`, and `hours_per_week`. The six categorical fields,
+in transformer order, are `workclass`, `education`, `marital_status`,
+`occupation`, `relationship`, and `native_country`.
 
-The local API serves the baseline global threshold only. It does not apply the
-offline sex-specific thresholds. API responses name the policy and artifact ID
-so the offline fairness experiment cannot be mistaken for deployed behavior.
+The fitted one-hot encoder uses `handle_unknown="ignore"`, so validation and test
+OOV categories produce zeros for that field's category block. Each run records
+split-level and per-field OOV values, affected rows, and shares against the
+training vocabulary. The local simulator uses the fitted vocabulary as an input
+allowlist and rejects OOV categories before scoring.
 
-## Limitations
+The fitted vocabulary is serialized in the digest-bound model, its transformed
+feature names are repeated in report and manifest preprocessing evidence, and
+the simulator reads the same encoder category arrays. There is no separate
+serving vocabulary to drift independently.
 
-- Adult is a 1994 census-income dataset, not applicant or job-performance data.
-- Binary sex and race groupings erase identity and intersectional detail.
-- Bootstrap intervals describe test-sample uncertainty, not external validity.
-- Passing a configurable gate would not establish safety, legality, or validity.
+Supported estimators are Logistic Regression, Random Forest, and XGBoost.
+Model parameters, transformed feature names, source digest, data digest,
+runtime, dependencies, and resolved configuration are recorded per run. Run
+creation clones the input configuration, synchronizes the effective model type,
+validation ratio, seed, and model `random_state`, then hashes the effective
+resolved configuration. The caller's configuration object is not mutated.
+
+## Evaluated policies
+
+### Baseline
+
+One global probability threshold produces the paired reference predictions.
+
+### Offline group-threshold policy
+
+Validation labels and one declared binary group attribute are used to enumerate
+a two-dimensional threshold grid. The optimizer returns the nondominated
+accuracy versus absolute TPR-gap frontier and selects the highest-accuracy point
+that meets the configured TPR-gap and accuracy-loss constraints.
+
+This policy is an offline evaluation object. It requires protected-group values
+and is never used by the local API.
+
+### Global review band
+
+A second validation-only search chooses a symmetric probability band around the
+global threshold. Scores inside the band produce
+`manual_review_required`; scores outside it produce an automatic simulation
+decision. Selection maximizes automation coverage under an automated-error
+constraint and minimum sample count.
+
+Held-out evaluation reports coverage, automated error, review rate, and observed
+group spans. No reviewer is implemented, and reviewer accuracy or bias is not
+assumed.
+
+### Validation-overlap dependence
+
+The run counts exact 11-feature and exact full-record overlap from fit rows into
+validation. It repeats both policy searches on validation rows whose feature
+identity does not occur in fit, without changing the fitted model or validation
+probabilities. The alternate policies are sensitivity evidence only. They do
+not replace the canonical policies evaluated on held-out test rows, and an
+unestimable retune remains explicit.
+
+## Measurements
+
+Each run records:
+
+- accuracy, precision, recall, F1, ROC AUC, PR AUC, and Brier score;
+- statistical parity difference and disparate impact;
+- privileged and unprivileged TPR and FPR with signed gaps;
+- paired baseline and adjusted metrics on identical held-out rows;
+- sex, original-race, binary-race, and observed sex by original-race cells;
+- support, class counts, confusion counts, calibration, and Wilson intervals;
+- `sufficient`, `limited`, or `not_estimable` evidence states;
+- weighted versus unweighted sensitivity using `fnlwgt`;
+- paired label-and-group-stratified bootstrap intervals;
+- fixed-policy metrics on the complete and exact-overlap-excluded held-out
+  slices, with explicit estimability evidence;
+- bound raw and processed data-semantics evidence;
+- an aggregate-only held-out monitoring reference;
+- validation selection evidence for both policy mechanisms; and
+- train-to-validation overlap counts and overlap-excluded policy-retuning
+  evidence.
+
+Rates with zero denominators remain not estimable. Small cells stay visible and
+are excluded from worst-group spans when their evidence state is insufficient.
+
+## Robustness study
+
+`fairness study` repeats model fitting and both policy selections across unique
+seeds. Reports are aggregated only when schema, data, source, model type and
+parameters, resolved configuration apart from per-run seed fields, protocol,
+feature contract, gate threshold policy, and metric coverage match.
+
+The summary includes distributions for performance and disparity metrics,
+threshold distributions, gate pass rate, worst gap by metric, and a deterministic
+worst-seed ranking. Every run reuses the same official test rows, so the study
+measures training and policy-selection sensitivity rather than independent
+population uncertainty.
+
+## Offline monitoring evidence
+
+Each bundle includes a strict aggregate reference built from held-out features,
+baseline scores and predictions, observed audit groups, delayed labels, and
+audit-only sample weights. It stores distributions and quantile sketches, never
+source rows.
+
+`fairness monitor compare` validates a current snapshot against the same role
+schema and reports descriptive feature, score, prediction, group-composition,
+and optional delayed-label drift. Its status is `PASS`, `FAIL`, or
+`INSUFFICIENT_EVIDENCE`. This gate is separate from the model-policy gate and
+does not approve an operating context. See [`monitoring.md`](monitoring.md).
+
+Snapshot validation also checks relational consistency among derived
+aggregates: category counts, shares, and unknown summaries; prediction counts
+and selection rate; class and confusion totals; protected-group rollups; and
+binary rates derived from confusion denominators. Contradictory aggregates are
+rejected before publication, load, or comparison.
+
+## Governance
+
+The strict schema and configured gate check point metrics, bootstrap interval
+bounds, adjusted intersectional TPR and FPR spans, and the held-out review-band
+constraint. It distinguishes a pass, a valid rejection, and malformed evidence.
+
+The exact gate thresholds are persisted with the verdict. Bundle save and load
+re-evaluate report evidence under those thresholds and require the fresh result
+to match report and manifest. The serving review-band and offline group policy
+are separately cross-bound to their report selection, threshold, and protocol
+evidence.
+
+A pass would mean only that the encoded criteria held for one benchmark
+configuration. See [`governance.md`](governance.md).
+
+## Simulation boundary
+
+The local v2 API:
+
+- accepts exactly the 11 model features;
+- rejects protected attributes, `fnlwgt`, extra fields, nulls, invalid ranges,
+  and unseen categories;
+- serves only the global review band;
+- returns policy and artifact identity with every result; and
+- refuses governance-rejected artifacts unless a research override is explicit.
+
+The interface is for local evidence inspection. It has no operational
+employment workflow, security perimeter, privacy program, appeal path, or
+accountable decision owner.
+
+## Artifact integrity
+
+Runs are published atomically from a hidden sibling temporary directory with a
+fresh UUID suffix. The manifest binds:
+
+- `model.joblib`
+- `report.json`
+- `policy.json`
+- `predictions.csv`
+- `audit.html`
+- `monitoring.json`
+
+The loader checks each digest, document binding, Python minor, dependency
+version, class mapping, model feature names, policy contract, and monitoring
+schema. It also binds the preprocessing quality sidecar digest when available.
+The manifest is not signed and cannot protect against an attacker who rewrites
+the entire bundle.
+
+Other writers described as atomic use the same collision-free sibling temporary
+path rule for preprocessing CSV and JSON, standalone JSON and monitoring output,
+batch CSV, and the incomplete-study marker. Direct HTML export is not an atomic
+writer.
+
+## Material limitations
+
+- Adult is a historical income benchmark, not a hiring-validity dataset.
+- Income is not a defensible proxy for job performance or qualification.
+- Group metrics do not prove individual fairness or causal discrimination.
+- Post-processing cannot repair a missing construct, biased label, or harmful
+  data-collection process.
+- Binary and coarse demographic categories omit identities and within-group
+  variation.
+- Row bootstrap intervals do not cover dataset shift, model selection, or the
+  Census sample design.
+- Weighted sensitivity does not establish population-representative estimates.
+- Feature-vector collisions do not identify people, but conflicts and
+  cross-split overlap weaken simple independence assumptions.
+- Removing repeated feature identities does not make the remaining slice an
+  independent or externally representative dataset.
+- Aggregate monitoring can expose descriptive shift, not prove root cause,
+  representativeness, or operational safety.
+- Review-band evaluation measures workload and automated error, not the quality
+  of human decisions.
+- No result in this repository establishes legal compliance or safe use in an
+  employment process.
 
 ## Authors
 
-Roberto Villafuerte and Charles Santhakumar, University of Helsinki collaboration.
+Roberto Villafuerte and Charles Santhakumar, University of Helsinki
+collaboration.

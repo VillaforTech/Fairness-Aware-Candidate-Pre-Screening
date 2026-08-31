@@ -1,10 +1,9 @@
-# Local demo operations
+# Local simulation operations
 
-This project supports a reproducible local demo, not a production deployment.
-The API loads one fail-closed run bundle and serves the baseline global
-threshold. It never serves the offline sex-specific threshold intervention.
+This repository provides a reproducible local service for inspecting one audit
+bundle. It does not provide a production deployment path.
 
-## Build a complete run bundle
+## Build a run bundle
 
 ```bash
 uv sync --locked --python 3.12 --extra dev --extra api
@@ -22,28 +21,68 @@ uv run fairness audit \
   --bootstrap-samples 500
 ```
 
-A complete `runs/local-xgb/` directory contains:
+Preprocessing also writes a digest-bound
+`adult_model_ready.quality.json` sidecar. The experiment verifies it against the
+CSV and embeds its data-semantics evidence in the report.
+
+Run creation clones the supplied configuration before applying effective
+command values. Model type and validation ratio are synchronized with the
+resolved model and data sections. The run seed is synchronized with the global
+seed, split seed, estimator `random_state`, and resolved model `random_state`.
+The effective configuration is SHA-256 bound without mutating the caller's
+configuration object.
+
+The run is published atomically only after all seven files are written and their
+cross-document contracts validate:
 
 ```text
-manifest.json   artifact identity, hashes, feature contract, and gate result
+manifest.json   identity, hashes, contracts, runtime, and gate verdict
 model.joblib    fitted preprocessing and classifier pipeline
-policy.json     served global policy and offline experimental policy
-report.json     protocol, metrics, subgroup cells, intervals, and verdict
-predictions.csv held-out rows and both prediction variants
+policy.json     global review band and offline evaluation policy
+report.json     protocol, metrics, uncertainty, diagnostics, and verdict
+predictions.csv held-out probabilities and paired policy outcomes
+audit.html      portable visual evidence report
+monitoring.json aggregate-only held-out drift reference
 ```
 
-The loader checks required files, schema versions, hashes, run IDs, the exact
-12-feature contract, Python minor version, model-library versions, class
-mapping, and probability output before readiness.
+The bundle uses a hidden sibling temporary directory with a fresh UUID suffix,
+then one `os.replace` publishes the destination. Other atomic outputs use the
+same collision-free sibling-path rule for preprocessing CSV and JSON, standalone
+JSON and monitoring files, batch CSV, and incomplete-study markers. Direct HTML
+export is a separate convenience write and is not described as atomic.
 
-The application code is tested on Python 3.10–3.12, but serialized bundles are
-runtime-specific. The default recipe deliberately creates and serves the bundle
-with Python 3.12. A bundle produced with another supported Python minor must be
-served by an image built with that same minor.
+The loader checks:
 
-## Run and smoke-test locally
+- schema versions and run IDs;
+- SHA-256 digests for all bound files;
+- data, data-quality, source, and resolved-config fingerprints;
+- report and manifest agreement on effective model type, seed, the synchronized
+  resolved configuration, and its digest;
+- the exact ordered 11-feature contract and canonical numeric/categorical
+  transformer assignments;
+- fitted training vocabularies, `handle_unknown="ignore"`, transformed feature
+  names, and the binary class mapping;
+- policy kind, thresholds, review behavior, and protected-attribute flags;
+- serving-policy agreement with selective-review evidence and offline-policy
+  agreement with validation selection, held-out thresholds, and protocol;
+- a fresh gate evaluation using the persisted threshold set, with report and
+  manifest verdict agreement;
+- report, data-semantics, and manifest agreement;
+- monitoring snapshot schema and digest;
+- Python minor version; and
+- exact model-runtime dependency versions.
+
+Serialized model bundles are runtime-specific. Build and load the bundle with
+the same supported Python minor and dependency versions.
+
+## Run locally
+
+The service refuses a governance-rejected artifact by default. This is the
+normal safe behavior. To inspect a rejected research run deliberately, set the
+explicit override:
 
 ```bash
+ALLOW_REJECTED_RESEARCH_BUNDLE=1 \
 RUN_DIR=runs/local-xgb \
   uv run uvicorn fairness_project.inference.api:app \
   --host 127.0.0.1 \
@@ -55,63 +94,95 @@ In another terminal:
 ```bash
 curl --fail http://127.0.0.1:8000/health
 curl --fail http://127.0.0.1:8000/ready
-curl --fail http://127.0.0.1:8000/v1/metadata
+curl --fail http://127.0.0.1:8000/v2/metadata
 ```
 
-`/health` is liveness. `/ready` is the artifact-integrity check and should be
-used for traffic readiness.
+`/health` checks only the process. `/ready` requires a complete and permitted
+artifact.
 
-## Docker demo
+## Docker demonstration
 
-Build the image, then mount a complete bundle read-only:
+Build an image, then mount one complete bundle read-only:
 
 ```bash
 docker build \
   --build-arg PYTHON_VERSION=3.12 \
-  -t fairness-audit-api:0.2.0 .
+  -t fairness-audit-api:0.3.0 .
 
 docker run --rm \
   --publish 127.0.0.1:8000:8000 \
+  --env ALLOW_REJECTED_RESEARCH_BUNDLE=1 \
   --volume "$PWD/runs/local-xgb:/app/run:ro" \
-  fairness-audit-api:0.2.0
+  fairness-audit-api:0.3.0
 ```
 
-Compose uses `FAIRNESS_RUN_DIR` for the same read-only mount:
+The override is appropriate only for a deliberate evaluation demonstration.
+Do not add it to a general-purpose environment configuration.
+
+If the bundle is absent, incomplete, changed, incompatible, or not allowed,
+liveness can still respond while readiness and simulation endpoints return
+`503`.
+
+## Batch simulation
+
+HTTP and CSV use the same contract and `InferenceService`:
 
 ```bash
-FAIRNESS_PYTHON_VERSION=3.12 \
-FAIRNESS_RUN_DIR="$PWD/runs/local-xgb" \
-  docker compose up --build
-```
-
-For example, serving a bundle generated with Python 3.11 requires
-`--build-arg PYTHON_VERSION=3.11`, or `FAIRNESS_PYTHON_VERSION=3.11` with
-Compose. A mismatched image is expected to remain unready rather than attempt an
-unsafe cross-runtime load.
-
-If the bundle is absent, incomplete, incompatible, corrupted, or does not match
-the digests recorded in its manifest, liveness still responds but readiness and
-prediction endpoints return `503`. The manifest is not signed, so these checks
-do not protect against an attacker who can rewrite the entire bundle.
-
-## Batch path
-
-HTTP and CSV inference share the same service and policy:
-
-```bash
-uv run fairness predict \
+uv run fairness simulate \
   --run-dir runs/local-xgb \
   --input-csv examples/input.csv \
-  --output-csv predictions/local-xgb.csv
+  --output-csv /tmp/local-xgb-simulation.csv \
+  --allow-rejected-research-bundle
 ```
 
-Batch output is written atomically. Invalid input produces no partial result.
+Batch output is written through a fresh UUID-suffixed sibling temporary file and
+an atomic replace. Invalid input creates no partial result, and concurrent
+writers do not share a temporary filename.
 
-## Deliberate non-production boundary
+## Offline monitoring comparison
 
-Do not expose this service to real users or use its output for employment
-decisions. It lacks a valid hiring target, prospective validation,
-authentication, authorization, TLS termination, rate limiting, secrets
-management, monitoring, incident response, privacy controls, appeal paths, and
-an accountable operating process. A passing experiment gate would not close
-those gaps.
+`monitoring.json` is a held-out reference, not a service process. Build a
+current aggregate snapshot and compare it offline:
+
+```bash
+uv run fairness monitor snapshot \
+  --input-csv offline/current.csv \
+  --output-json offline/current.json \
+  --feature-columns age,workclass,education,education_num,marital_status,occupation,relationship,native_country,capital_gain,capital_loss,hours_per_week \
+  --categorical-columns workclass,education,marital_status,occupation,relationship,native_country \
+  --score-column score \
+  --prediction-column prediction \
+  --protected-columns sex,race,race_binary
+
+uv run fairness monitor compare \
+  --reference-json runs/local-xgb/monitoring.json \
+  --current-json offline/current.json \
+  --output-json offline/comparison.json \
+  --require-pass
+```
+
+The comparison reports `PASS`, `FAIL`, or `INSUFFICIENT_EVIDENCE`. It does not
+run on a schedule or send alerts. See [`monitoring.md`](monitoring.md) for label,
+weight, threshold, and evidence semantics.
+
+Snapshot validation rejects internally contradictory aggregates before
+publication, load, or comparison. This includes category shares and unknown
+summaries that disagree with counts, prediction counts that disagree with
+selection rate or confusion totals, protected-group totals that do not roll up,
+and binary rates that cannot be derived from their stored confusion values.
+
+## Operating boundary
+
+Keep the service on localhost. It has no:
+
+- valid employment target or job-specific validation;
+- authentication, authorization, or transport-security termination;
+- rate limiting, secrets management, retention policy, or incident response;
+- privacy impact assessment or data-subject process;
+- reviewer staffing, training, quality measurement, or conflict controls;
+- accommodations, appeal, contestability, or adverse-action workflow; or
+- drift response owner and accountable decision authority.
+
+The API is useful because it makes artifact loading, request validation,
+abstention, and decision provenance testable. Those engineering properties do
+not turn the benchmark into an operational hiring system.

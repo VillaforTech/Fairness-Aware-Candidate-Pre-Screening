@@ -45,13 +45,12 @@ def _setup_logging() -> logging.Logger:
 
 
 class PredictionInput(BaseModel):
-    """The exact 12-feature Adult contract used by training."""
+    """The exact 11-feature scoring contract used by training."""
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     age: int = Field(..., strict=True, ge=0, le=120)
     workclass: str = Field(..., min_length=1)
-    fnlwgt: int = Field(..., strict=True, ge=0)
     education: str = Field(..., min_length=1)
     education_num: int = Field(..., strict=True, ge=1, le=20)
     marital_status: str = Field(..., min_length=1)
@@ -64,10 +63,13 @@ class PredictionInput(BaseModel):
 
 
 class PredictionOutput(BaseModel):
-    prediction: int
+    prediction: int | None
+    decision: str
     probability: float
     label: str
     decision_threshold: float
+    review_lower_threshold: float
+    review_upper_threshold: float
     decision_policy: str
     artifact_id: str
 
@@ -98,21 +100,31 @@ class MetadataResponse(BaseModel):
     decision_policy: dict[str, object]
     governance: dict[str, object]
     evaluation_only: bool
-    api_version: str = "v1"
+    api_version: str = "v2"
 
 
 def _output_rows(batch) -> list[PredictionOutput]:
     return [
         PredictionOutput(
-            prediction=int(prediction),
+            prediction=None if int(prediction) == -1 else int(prediction),
+            decision=str(decision),
             probability=float(probability),
-            label=">50K" if prediction == 1 else "<=50K",
+            label=(
+                "manual_review_required"
+                if int(prediction) == -1
+                else ">50K"
+                if int(prediction) == 1
+                else "<=50K"
+            ),
             decision_threshold=batch.threshold,
+            review_lower_threshold=batch.lower_threshold,
+            review_upper_threshold=batch.upper_threshold,
             decision_policy=batch.policy_id,
             artifact_id=batch.artifact_id,
         )
-        for prediction, probability in zip(
+        for prediction, decision, probability in zip(
             batch.predictions,
+            batch.decisions,
             batch.probabilities,
             strict=True,
         )
@@ -133,7 +145,11 @@ def create_app(initial_service: InferenceService | None = None) -> FastAPI:
                 application.state.readiness_error = "RUN_DIR is not set"
             else:
                 try:
-                    application.state.service = InferenceService.from_run(Path(run_dir))
+                    allow_rejected = os.environ.get("ALLOW_REJECTED_RESEARCH_BUNDLE") == "1"
+                    application.state.service = InferenceService.from_run(
+                        Path(run_dir),
+                        allow_governance_rejected=allow_rejected,
+                    )
                 except (ArtifactValidationError, OSError, ValueError) as exc:
                     application.state.readiness_error = str(exc)
         if application.state.service is None:
@@ -155,13 +171,13 @@ def create_app(initial_service: InferenceService | None = None) -> FastAPI:
     application = FastAPI(
         title="Adult Income Audit API",
         description=(
-            "Reference baseline inference for a validated local run bundle. "
-            "The offline group-threshold experiment is not served."
+            "Evaluation-only policy simulation for a validated local run bundle. "
+            "It uses a global review band and never serves protected-attribute thresholds."
         ),
-        version="1.1.0",
+        version="2.0.0",
         lifespan=lifespan,
     )
-    router = APIRouter(prefix="/v1")
+    router = APIRouter(prefix="/v2")
 
     def get_service(request: Request) -> InferenceService:
         service = getattr(request.app.state, "service", None)
@@ -180,10 +196,10 @@ def create_app(initial_service: InferenceService | None = None) -> FastAPI:
 
     @router.get("/metadata", response_model=MetadataResponse)
     async def metadata(service: InferenceService = Depends(get_service)) -> MetadataResponse:
-        return MetadataResponse(**service.metadata, api_version="v1")
+        return MetadataResponse(**service.metadata, api_version="v2")
 
-    @router.post("/predict", response_model=PredictionOutput)
-    async def predict(
+    @router.post("/simulate", response_model=PredictionOutput)
+    async def simulate(
         input_data: PredictionInput,
         service: InferenceService = Depends(get_service),
     ) -> PredictionOutput:
@@ -196,17 +212,17 @@ def create_app(initial_service: InferenceService | None = None) -> FastAPI:
             "prediction",
             extra={
                 "extra_data": {
-                    "endpoint": "/v1/predict",
+                    "endpoint": "/v2/simulate",
                     "artifact_id": result.artifact_id,
                     "decision_policy": result.decision_policy,
-                    "prediction": result.prediction,
+                    "decision": result.decision,
                 }
             },
         )
         return result
 
-    @router.post("/predict-batch", response_model=BatchPredictionOutput)
-    async def predict_batch(
+    @router.post("/simulate-batch", response_model=BatchPredictionOutput)
+    async def simulate_batch(
         input_data: BatchPredictionInput,
         service: InferenceService = Depends(get_service),
     ) -> BatchPredictionOutput:

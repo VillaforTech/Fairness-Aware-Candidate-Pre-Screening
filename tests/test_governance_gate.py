@@ -14,11 +14,12 @@ def _make_report(
     accuracy: float = 0.85,
     baseline_accuracy: float = 0.86,
     tpr_gap: float = 0.03,
+    fpr_gap: float = 0.03,
     di: float = 0.90,
     spd: float = 0.05,
 ) -> dict:
     return {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "metadata": {
             "run_id": "test_run",
             "seed": 42,
@@ -33,8 +34,18 @@ def _make_report(
             "metrics": {
                 "accuracy": accuracy,
                 "TPR_gap": tpr_gap,
+                "FPR_gap": fpr_gap,
                 "DI": di,
                 "SPD": spd,
+            },
+            "validation_tuning": {
+                "selection": {
+                    "status": "feasible",
+                    "selected": {
+                        "threshold_privileged": 0.5,
+                        "threshold_unprivileged": 0.4,
+                    },
+                }
             },
         },
     }
@@ -46,6 +57,54 @@ def test_passing_report_checks_accuracy_tradeoff() -> None:
     assert result.report_valid is True
     assert result.exit_code == 0
     assert result.metrics_checked["accuracy_drop"] == pytest.approx(0.01)
+    assert result.thresholds == GateThresholds().to_dict()
+
+
+def test_infeasible_validation_policy_is_a_valid_rejection() -> None:
+    report = _make_report()
+    report["results"]["validation_tuning"]["selection"] = {
+        "status": "infeasible",
+        "selected": None,
+    }
+
+    result = check_gate(report)
+
+    assert result.report_valid is True
+    assert result.passed is False
+    assert result.exit_code == 1
+    assert result.metrics_checked["validation_policy_status"] == "infeasible"
+    assert any("No offline policy candidate" in item for item in result.violations)
+
+
+def test_undefined_disparate_impact_is_a_valid_policy_rejection() -> None:
+    report = _make_report()
+    report["results"]["metrics"]["DI"] = None
+
+    result = check_gate(report)
+
+    assert result.report_valid is True
+    assert result.passed is False
+    assert result.metrics_checked["DI"] is None
+    assert any("DI is not estimable" in item for item in result.violations)
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        None,
+        {"status": "unknown", "selected": None},
+        {"status": "feasible", "selected": None},
+        {"status": "infeasible", "selected": {}},
+    ],
+)
+def test_malformed_validation_policy_evidence_fails_closed(selection) -> None:
+    report = _make_report()
+    report["results"]["validation_tuning"]["selection"] = selection
+
+    result = check_gate(report)
+
+    assert result.report_valid is False
+    assert result.exit_code == 2
 
 
 @pytest.mark.parametrize(
@@ -54,6 +113,7 @@ def test_passing_report_checks_accuracy_tradeoff() -> None:
         ({"accuracy": 0.50}, "accuracy"),
         ({"baseline_accuracy": 0.90, "accuracy": 0.85}, "accuracy_drop"),
         ({"tpr_gap": 0.20}, "TPR_gap"),
+        ({"fpr_gap": 0.20}, "FPR_gap"),
         ({"di": 0.50}, "DI"),
         ({"di": 1.50}, "DI"),
         ({"spd": 0.30}, "SPD"),
@@ -79,7 +139,7 @@ def test_invalid_metric_types_and_non_finite_values_fail(invalid) -> None:
 
 
 def test_missing_metrics_and_metadata_fail_closed() -> None:
-    result = check_gate({"schema_version": "1.0", "metadata": {}, "results": {}})
+    result = check_gate({"schema_version": "2.0", "metadata": {}, "results": {}})
     assert result.passed is False
     assert result.report_valid is False
     assert any("results.metrics must be an object" in item for item in result.violations)
@@ -163,6 +223,7 @@ def test_git_revision_and_worktree_state_must_agree(git_commit, dirty_worktree, 
         {"min_accuracy": 2},
         {"max_accuracy_drop": -0.1},
         {"max_tpr_gap": math.nan},
+        {"max_fpr_gap": -0.1},
         {"min_disparate_impact": 0},
         {"max_disparate_impact": 0.9},
         {"max_spd": True},
@@ -176,7 +237,36 @@ def test_invalid_policy_thresholds_are_rejected(kwargs) -> None:
 def test_custom_thresholds() -> None:
     report = _make_report(accuracy=0.70, baseline_accuracy=0.71)
     assert check_gate(report).passed is False
-    assert check_gate(report, GateThresholds(min_accuracy=0.60)).passed is True
+    custom = GateThresholds(min_accuracy=0.60)
+    result = check_gate(report, custom)
+    assert result.passed is True
+    assert result.thresholds == custom.to_dict()
+
+    report["governance"] = result.to_dict()
+    reproduced = check_gate(report)
+    assert reproduced.passed is True
+    assert reproduced.thresholds == custom.to_dict()
+
+
+def test_malformed_persisted_threshold_policy_is_rejected() -> None:
+    report = _make_report()
+    report["governance"] = {"thresholds": {"min_accuracy": 0.5}}
+
+    with pytest.raises(ValueError, match="exact gate policy fields"):
+        check_gate(report)
+
+
+def test_uncertainty_interval_can_fail_a_passing_point_estimate() -> None:
+    report = _make_report(tpr_gap=0.01)
+    report["results"]["uncertainty"] = {
+        "intervals": {"adjusted": {"TPR_gap": {"lower": -0.08, "median": 0.01, "upper": 0.04}}}
+    }
+
+    result = check_gate(report)
+
+    assert result.report_valid is True
+    assert result.passed is False
+    assert any("TPR_gap interval" in violation for violation in result.violations)
 
 
 def test_load_report_and_cli_exit_codes(tmp_path) -> None:

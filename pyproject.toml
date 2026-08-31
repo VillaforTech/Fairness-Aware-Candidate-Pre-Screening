@@ -4,15 +4,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fairness-project"
-version = "0.2.0"
-description = "Reproducible responsible-ML benchmark audit using the UCI Adult dataset"
+version = "0.3.0"
+description = "Auditable fair-ML policy lab with uncertainty, selective review, and immutable evidence"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
     {name = "Roberto Villafuerte"},
     {name = "Charles Santhakumar"},
 ]
-keywords = ["fairness", "machine-learning", "bias-mitigation", "responsible-ai", "equal-opportunity"]
+keywords = [
+    "fairness",
+    "machine-learning",
+    "responsible-ai",
+    "model-governance",
+    "uncertainty",
+    "selective-classification",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
@@ -28,8 +35,6 @@ dependencies = [
     "pandas>=2.0.0",
     "scikit-learn>=1.3.0",
     "xgboost>=2.0.0",
-    "matplotlib>=3.7.0",
-    "seaborn>=0.12.0",
     "joblib>=1.3.0",
     "typer>=0.9.0",
     "pyyaml>=6.0",
@@ -50,13 +55,9 @@ api = [
     "fastapi>=0.103.0",
     "uvicorn>=0.23.0",
     "httpx>=0.25.0",
-    "gunicorn>=21.2.0",
-]
-monitoring = [
-    "evidently>=0.4.0",
 ]
 all = [
-    "fairness-project[dev,api,monitoring]",
+    "fairness-project[dev,api]",
 ]
 
 [project.scripts]

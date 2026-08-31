@@ -1,6 +1,8 @@
 # Fairness Project Configuration
 # ================================
-# Default configuration for fairness-aware candidate pre-screening
+# Default configuration for the Adult income policy-audit benchmark
+
+schema_version: "2.0"
 
 # Global settings
 seed: 42
@@ -39,14 +41,20 @@ fairness:
   sensitive_attributes:
     - sex
     - race_binary
-  privileged_groups:
-    sex: Male
-    race_binary: White
+  policy_attribute: sex
+  privileged_value: Male
+  unprivileged_value: Female
 
   # Equal Opportunity settings
   eo_base_threshold: 0.5
   eo_n_thresholds: 101
   eo_search_range: [0.0, 0.5]
+  frontier_max_abs_tpr_gap: 0.05
+  frontier_max_accuracy_loss: 0.03
+  review_max_automated_error: 0.10
+  review_min_automated_samples: 250
+  subgroup_min_support: 50
+  subgroup_min_class_count: 20
 
 # Output paths
 output:

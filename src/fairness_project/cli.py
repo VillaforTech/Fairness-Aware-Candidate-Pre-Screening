@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
+import pandas as pd
 import typer
 from rich.console import Console
 
@@ -14,15 +16,23 @@ from fairness_project.experiment import ExperimentResult, run_experiment
 from fairness_project.governance.gate import check_gate, load_report
 from fairness_project.inference.batch import run_batch_inference
 from fairness_project.inference.service import InferenceService
+from fairness_project.models.artifact import load_bundle, read_json, write_json
+from fairness_project.monitoring import build_snapshot, compare_snapshots
+from fairness_project.reporting import write_audit_html
+from fairness_project.study import run_stability_study
 
 app = typer.Typer(
     name="fairness",
-    help="Leakage-free responsible-ML audit tools for the UCI Adult example.",
+    help="Auditable fair-ML policy lab for the UCI Adult benchmark.",
     add_completion=False,
     no_args_is_help=True,
 )
 data_app = typer.Typer(help="Prepare the bundled UCI Adult data.", no_args_is_help=True)
 app.add_typer(data_app, name="data")
+monitor_app = typer.Typer(
+    help="Build and compare aggregate-only drift snapshots.", no_args_is_help=True
+)
+app.add_typer(monitor_app, name="monitor")
 console = Console()
 
 
@@ -101,6 +111,83 @@ def audit(
         raise typer.Exit(code=result.gate.exit_code)
 
 
+def _parse_seeds(value: str) -> list[int]:
+    try:
+        seeds = [int(item.strip()) for item in value.split(",") if item.strip()]
+    except ValueError as exc:
+        raise typer.BadParameter("Seeds must be a comma-separated list of integers") from exc
+    if len(seeds) < 2:
+        raise typer.BadParameter("Provide at least two seeds")
+    if any(seed < 0 for seed in seeds) or len(set(seeds)) != len(seeds):
+        raise typer.BadParameter("Seeds must be unique non-negative integers")
+    return seeds
+
+
+def _parse_columns(value: str, *, required: bool = False) -> list[str]:
+    columns = [item.strip() for item in value.split(",") if item.strip()]
+    if required and not columns:
+        raise typer.BadParameter("Provide at least one column")
+    if len(columns) != len(set(columns)):
+        raise typer.BadParameter("Column lists must not contain duplicates")
+    return columns
+
+
+@app.command()
+def study(
+    model: Literal["lr", "rf", "xgb"] = typer.Option("xgb", help="Model benchmark."),
+    seeds: str = typer.Option("0,1,2,3,4", help="Comma-separated split and model seeds."),
+    data_path: Path = typer.Option(
+        Path("data/processed/adult/adult_model_ready.csv"),
+        exists=True,
+        dir_okay=False,
+        help="Model-ready Adult CSV.",
+    ),
+    output_dir: Path = typer.Option(Path("studies"), help="Parent directory for studies."),
+    study_id: str | None = typer.Option(None, help="Stable study identifier."),
+    config_path: Path | None = typer.Option(
+        None,
+        "--config",
+        exists=True,
+        dir_okay=False,
+        help="Optional YAML configuration.",
+    ),
+    bootstrap_samples: int = typer.Option(
+        100,
+        min=0,
+        help="Paired test-row bootstrap replicates per run.",
+    ),
+) -> None:
+    """Retrain and retune across seeds, then render one stability evidence package."""
+    parsed_seeds = _parse_seeds(seeds)
+    resolved_study_id = study_id or (
+        f"{model}-stability-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    )
+    result = run_stability_study(
+        data_path=data_path,
+        output_dir=output_dir,
+        study_id=resolved_study_id,
+        model_type=model,
+        seeds=parsed_seeds,
+        config=load_config(config_path),
+        bootstrap_samples=bootstrap_samples,
+    )
+    governance = result.summary["governance"]
+    console.print(f"Study: {result.study_dir}", style="bold green")
+    console.print(f"Gate pass rate: {governance['pass_count']}/{result.summary['report_count']}")
+    console.print(f"Interactive report: {result.html_path}")
+
+
+@app.command("render-report")
+def render_report(
+    run_dir: Path = typer.Option(..., exists=True, file_okay=False, help="Validated run bundle."),
+    output: Path = typer.Option(..., dir_okay=False, help="Portable HTML output."),
+) -> None:
+    """Render a self-contained audit report from an integrity-validated bundle."""
+    bundle = load_bundle(run_dir)
+    write_audit_html(bundle.report, output)
+    console.print(f"Audit report: {output}", style="bold green")
+
+
 @app.command("gate")
 def gate_report(
     report: Path = typer.Option(..., exists=True, dir_okay=False, help="Evaluation report."),
@@ -124,16 +211,71 @@ def gate_report(
         raise typer.Exit(code=result.exit_code)
 
 
-@app.command()
-def predict(
+@app.command("simulate")
+def simulate(
     run_dir: Path = typer.Option(..., exists=True, file_okay=False, help="Validated run bundle."),
     input_csv: Path = typer.Option(..., exists=True, dir_okay=False, help="Input CSV."),
     output_csv: Path = typer.Option(..., dir_okay=False, help="Prediction output CSV."),
+    allow_rejected_research_bundle: bool = typer.Option(
+        False,
+        help="Explicitly simulate a governance-rejected research artifact.",
+    ),
 ) -> None:
-    """Run baseline batch inference from a validated bundle."""
-    service = InferenceService.from_run(run_dir)
+    """Run an evaluation-only batch simulation from a validated bundle."""
+    service = InferenceService.from_run(
+        run_dir,
+        allow_governance_rejected=allow_rejected_research_bundle,
+    )
     run_batch_inference(service=service, input_path=input_csv, output_path=output_csv)
     console.print(f"Predictions saved to {output_csv}", style="bold green")
+
+
+@monitor_app.command("snapshot")
+def monitor_snapshot(
+    input_csv: Path = typer.Option(..., exists=True, dir_okay=False),
+    output_json: Path = typer.Option(..., dir_okay=False),
+    feature_columns: str = typer.Option(..., help="Comma-separated model feature columns."),
+    categorical_columns: str = typer.Option("", help="Comma-separated categorical features."),
+    score_column: str = typer.Option("score"),
+    prediction_column: str = typer.Option("prediction"),
+    protected_columns: str = typer.Option("", help="Comma-separated audit-only groups."),
+    label_column: str | None = typer.Option(None, help="Optional delayed binary label."),
+    sample_weight_column: str | None = typer.Option(
+        None,
+        help="Optional audit-only sample weight.",
+    ),
+) -> None:
+    """Create a strict, aggregate-only snapshot from an offline audit CSV."""
+    snapshot = build_snapshot(
+        pd.read_csv(input_csv),
+        feature_columns=_parse_columns(feature_columns, required=True),
+        categorical_columns=_parse_columns(categorical_columns),
+        score_column=score_column,
+        prediction_column=prediction_column,
+        protected_columns=_parse_columns(protected_columns),
+        label_column=label_column,
+        sample_weight_column=sample_weight_column,
+    )
+    write_json(output_json, snapshot)
+    console.print(f"Monitoring snapshot: {output_json}", style="bold green")
+
+
+@monitor_app.command("compare")
+def monitor_compare(
+    reference_json: Path = typer.Option(..., exists=True, dir_okay=False),
+    current_json: Path = typer.Option(..., exists=True, dir_okay=False),
+    output_json: Path = typer.Option(..., dir_okay=False),
+    require_pass: bool = typer.Option(False, help="Exit non-zero unless the drift gate passes."),
+) -> None:
+    """Compare two exact-schema snapshots under the fail-closed drift policy."""
+    comparison = compare_snapshots(read_json(reference_json), read_json(current_json))
+    write_json(output_json, comparison)
+    status = comparison["gate"]["status"]
+    style = "bold green" if status == "PASS" else "bold yellow"
+    console.print(f"Offline drift gate: {status}", style=style)
+    console.print(f"Comparison: {output_json}")
+    if require_pass and status != "PASS":
+        raise typer.Exit(code=1)
 
 
 @data_app.command("preprocess")
@@ -143,12 +285,18 @@ def preprocess_data(
         Path("data/processed/adult/adult_model_ready.csv"),
         dir_okay=False,
     ),
+    quality_report: Path | None = typer.Option(
+        None,
+        dir_okay=False,
+        help="Data-semantics sidecar; defaults beside the model-ready CSV.",
+    ),
 ) -> None:
     """Rebuild the model-ready CSV from the bundled raw train/test files."""
     prepare_model_ready_data(
         train_path=input_dir / "adult.data",
         test_path=input_dir / "adult.test",
         output_path=output_path,
+        quality_report_path=quality_report,
     )
 
 

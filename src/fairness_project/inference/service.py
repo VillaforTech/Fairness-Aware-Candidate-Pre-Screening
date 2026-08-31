@@ -9,13 +9,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from fairness_project.data.schema import FEATURE_COLUMNS
+from fairness_project.data.schema import CATEGORICAL_FEATURE_COLUMNS, FEATURE_COLUMNS
 from fairness_project.models.artifact import ArtifactValidationError, ModelBundle, load_bundle
 
 CONTRACT_PROBE = {
     "age": 35,
     "workclass": "Private",
-    "fnlwgt": 200000,
     "education": "Bachelors",
     "education_num": 13,
     "marital_status": "Married-civ-spouse",
@@ -29,20 +28,12 @@ CONTRACT_PROBE = {
 
 NUMERIC_FEATURE_RANGES: dict[str, tuple[int, int | None]] = {
     "age": (0, 120),
-    "fnlwgt": (0, None),
     "education_num": (1, 20),
     "capital_gain": (0, None),
     "capital_loss": (0, None),
     "hours_per_week": (0, 168),
 }
-CATEGORICAL_FEATURES = (
-    "workclass",
-    "education",
-    "marital_status",
-    "occupation",
-    "relationship",
-    "native_country",
-)
+CATEGORICAL_FEATURES = tuple(CATEGORICAL_FEATURE_COLUMNS)
 
 
 class InferenceContractError(ValueError):
@@ -54,17 +45,51 @@ class PredictionBatch:
     """Predictions plus the explicit policy used to produce them."""
 
     predictions: np.ndarray
+    decisions: np.ndarray
     probabilities: np.ndarray
     threshold: float
+    lower_threshold: float
+    upper_threshold: float
     policy_id: str
     artifact_id: str
 
 
 class InferenceService:
-    """Run baseline predictions from one validated run bundle."""
+    """Run review-aware simulations from one integrity-validated bundle."""
 
-    def __init__(self, bundle: ModelBundle):
+    def __init__(self, bundle: ModelBundle, *, allow_governance_rejected: bool = False):
         self.bundle = bundle
+        if (
+            self.bundle.manifest["governance"].get("passed") is not True
+            and not allow_governance_rejected
+        ):
+            raise ArtifactValidationError(
+                "Governance rejected this artifact; pass the explicit research override to "
+                "run an evaluation-only simulation"
+            )
+        try:
+            preprocessor = self.bundle.model.named_steps["preprocess"]
+            encoder = preprocessor.named_transformers_["cat"]
+            categories = encoder.categories_
+            categorical_features = next(
+                list(columns)
+                for name, _transformer, columns in preprocessor.transformers_
+                if name == "cat"
+            )
+        except (AttributeError, KeyError, StopIteration, TypeError) as exc:
+            raise ArtifactValidationError(
+                "Model does not expose the fitted categorical vocabulary"
+            ) from exc
+        if categorical_features != CATEGORICAL_FEATURE_COLUMNS or len(categorical_features) != len(
+            categories
+        ):
+            raise ArtifactValidationError(
+                "Fitted categorical features do not match the canonical vocabulary contract"
+            )
+        self._categorical_vocabulary = {
+            str(feature): {str(value) for value in values}
+            for feature, values in zip(categorical_features, categories, strict=True)
+        }
         try:
             probabilities = np.asarray(
                 self.bundle.model.predict_proba(pd.DataFrame([CONTRACT_PROBE])),
@@ -72,7 +97,7 @@ class InferenceService:
             )
         except Exception as exc:
             raise ArtifactValidationError(
-                f"Model is incompatible with the canonical 12-feature contract: {exc}"
+                f"Model is incompatible with the canonical 11-feature contract: {exc}"
             ) from exc
         if probabilities.shape != (1, 2) or not np.isfinite(probabilities).all():
             raise ArtifactValidationError(
@@ -80,8 +105,16 @@ class InferenceService:
             )
 
     @classmethod
-    def from_run(cls, run_dir: str | Path) -> InferenceService:
-        return cls(load_bundle(run_dir))
+    def from_run(
+        cls,
+        run_dir: str | Path,
+        *,
+        allow_governance_rejected: bool = False,
+    ) -> InferenceService:
+        return cls(
+            load_bundle(run_dir),
+            allow_governance_rejected=allow_governance_rejected,
+        )
 
     @property
     def metadata(self) -> dict[str, Any]:
@@ -134,6 +167,14 @@ class InferenceService:
             stripped = values.str.strip()
             if stripped.eq("").any():
                 raise InferenceContractError(f"{column} cannot be blank")
+            vocabulary = self._categorical_vocabulary.get(column)
+            if vocabulary is None:
+                raise InferenceContractError(f"{column} is missing from the fitted vocabulary")
+            unknown = sorted(set(stripped) - vocabulary)
+            if unknown:
+                raise InferenceContractError(
+                    f"{column} contains categories not seen during training: {unknown}"
+                )
             features[column] = stripped
 
         try:
@@ -160,11 +201,22 @@ class InferenceService:
         positive_index = classes.index(positive_class)
         probabilities = raw_probabilities[:, positive_index]
         threshold = float(self.bundle.policy["serving"]["threshold"])
+        lower_threshold = float(self.bundle.policy["serving"]["lower_threshold"])
+        upper_threshold = float(self.bundle.policy["serving"]["upper_threshold"])
+        decisions = np.where(probabilities >= threshold, "auto_positive", "auto_negative")
+        if lower_threshold < upper_threshold:
+            review_mask = (probabilities >= lower_threshold) & (probabilities <= upper_threshold)
+            decisions = decisions.astype("<U24")
+            decisions[review_mask] = "manual_review_required"
         predictions = (probabilities >= threshold).astype(int)
+        predictions[decisions == "manual_review_required"] = -1
         return PredictionBatch(
             predictions=predictions,
+            decisions=decisions,
             probabilities=probabilities,
             threshold=threshold,
+            lower_threshold=lower_threshold,
+            upper_threshold=upper_threshold,
             policy_id=self.bundle.policy["serving"]["policy_id"],
             artifact_id=self.bundle.manifest["run_id"],
         )

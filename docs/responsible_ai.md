@@ -1,123 +1,189 @@
-# Responsible AI protocol
+# Interpretation contract
 
-## Purpose and boundary
+## Purpose
 
-This repository studies a fairness intervention on UCI Adult, a 1994
-census-income dataset. It is a benchmark evaluation artifact, not a model of
-candidate quality and not a hiring system.
+This repository is an auditable policy lab built around UCI Adult. It studies
+how an income-classification decision policy changes measured utility, group
+disparities, uncertainty, and review burden under a fixed benchmark protocol.
 
-## Question under study
+The useful output is the evidence chain:
 
-The experiment asks a narrow question: on one fixed benchmark, what happens to
-measured sex-group disparities when the decision threshold for the lower-TPR
-group is reduced using validation labels only?
+```text
+raw data semantics -> split discipline -> policy search -> held-out metrics
+                   -> uncertainty -> subgroup evidence -> stability -> gate
+                   -> aggregate drift reference -> offline comparison
+```
 
-The implementation is best described as **one-sided opportunity uplift**. It
-keeps the Male threshold at `0.500` and may lower the Female threshold when the
-validation TPR is lower. If the Female validation TPR is already at least the
-Male TPR, it applies no adjustment. This is narrower than a general claim of
-fairness or full bidirectional equalized-odds optimization.
+No single fairness metric closes that chain.
 
-## Protocol
+## Questions the experiment can answer
 
-1. Rebuild the cleaned data from the bundled UCI train and test files.
-2. Preserve the official test partition.
-3. Draw validation rows only from the original training partition, jointly
-   stratified by income, sex, and binary race grouping.
-4. Fit preprocessing and the classifier on fit rows only.
-5. Tune the one-sided sex threshold on validation labels only.
-6. Freeze thresholds and evaluate baseline and adjusted predictions once on
-   the official test partition.
-7. Persist the full report, policy, manifest, model, predictions, hashes,
-   subgroup cells, and governance verdict as one versioned bundle.
+Within one declared configuration, the lab can show:
 
-Protected attributes are retained for offline evaluation but excluded from the
-12 model features. The local API serves only the baseline `0.500` global
-threshold and does not accept `sex` or `race` as inputs.
+- how complete-case deletion changes support and observed group composition;
+- where feature-vector collisions, conflicting labels, and cross-split overlap
+  limit a simple benchmark interpretation;
+- which group-threshold pairs were considered on validation data;
+- which pairs are nondominated in accuracy versus absolute TPR gap;
+- why one feasible point was selected, or why none was feasible;
+- how the frozen policy changed held-out performance and group rates;
+- how paired bootstrap intervals change the interpretation of point estimates;
+- where observed sex by race cells have sufficient, limited, or non-estimable
+  evidence;
+- how `fnlwgt`-weighted rates differ from unweighted rates;
+- how a global review band trades automation coverage for automated error;
+- whether validation-selected review behavior holds on the test partition;
+- whether a comparable offline snapshot passes, fails, or lacks sufficient
+  evidence under the configured drift policy; and
+- how metrics, thresholds, and gate outcomes vary across repeated seeds.
 
-## Measurements
+These are benchmark and engineering questions. They do not establish whether a
+real decision process should exist.
 
-The report records:
+## Policy separation
 
-- accuracy, precision, recall, F1, ROC AUC, PR AUC, and Brier score;
-- statistical parity difference (SPD);
-- disparate impact (DI);
-- privileged and unprivileged true-positive rates and their gap;
-- per-group sample, positive-label, negative-label, predicted-positive, TPR,
-  and FPR diagnostics for sex, binary race, and their intersection;
-- paired, label-and-group-stratified bootstrap intervals for baseline,
-  adjusted, and change metrics.
+The repository evaluates two mechanisms with different information needs.
 
-An undefined rate is represented explicitly rather than silently replaced with
-zero. Small cells remain visible in the report and must be interpreted with
-caution.
+### Offline group thresholds
 
-## Reference outcome
+The Pareto search uses validation labels and one binary protected-group field.
+That access is explicit and confined to offline evaluation. The selected policy
+is never exposed through the API.
 
-For XGBoost, seed 42, and 500 paired bootstrap replicates:
+This matters because group-specific cutoffs in a real employment process may be
+unlawful or inappropriate. The project does not treat a smaller TPR gap as
+permission to use such a policy.
 
-| Metric | Baseline | Offline adjusted | Change |
-|---|---:|---:|---:|
-| Accuracy | 0.8694 | 0.8678 | -0.0016 |
-| TPR gap | 0.0504 | -0.0124 | -0.0628 |
-| SPD | 0.1754 | 0.1563 | -0.0191 |
-| DI | 0.3400 | 0.4120 | +0.0720 |
+### Global review band
 
-The adjusted 95% bootstrap interval is `[-0.0560, 0.0268]` for TPR gap,
-`[0.1468, 0.1670]` for SPD, `[0.3817, 0.4370]` for DI, and
-`[0.8630, 0.8728]` for accuracy.
+The local simulator uses one group-blind probability band. It can abstain from
+an automatic outcome, but it does not implement human review. The report treats
+review as burden and unresolved work, not as a guaranteed correction.
 
-These results show a trade-off, not a success certificate. The default policy
-gate **fails** because DI remains below `0.80` and absolute SPD remains above
-`0.10`.
+Human decision makers can introduce inconsistency, delay, bias, privacy risk,
+and automation deference. Those outcomes are absent from Adult and cannot be
+inferred from review coverage.
 
-## Experimental policy gate
+## Measurement discipline
 
-| Check | Default |
-|---|---:|
-| Adjusted accuracy | at least 0.80 |
-| Accuracy drop from baseline | at most 0.02 |
-| Absolute TPR gap | at most 0.05 |
-| Disparate impact | 0.80 to 1.25 |
-| Absolute SPD | at most 0.10 |
+### Data semantics precede model metrics
 
-The strict parser rejects missing, malformed, non-finite, Boolean, and
-out-of-domain metrics. CI rebuilds data, generates a real Logistic Regression
-report through the canonical pipeline, and confirms the expected gate
-rejection. Unit fixtures separately exercise pass and fail cases.
+The preprocessing sidecar records 7.41% complete-case attrition and preserves
+group-specific missingness and composition evidence. It also exposes repeated
+11-feature vectors, label conflicts, and train/test feature overlap. These are
+properties of benchmark rows and feature identities, not proof that two rows
+belong to one person.
 
-A pass would mean only that these chosen numeric checks passed for one dataset,
-split, and model. It would not establish construct validity, job relatedness,
-external validity, legality, individual fairness, privacy, security, or safe
-operation.
+The experiment verifies the sidecar against the model-ready CSV, recomputes the
+processed audit, embeds the evidence, and binds the sidecar digest. This keeps
+data limitations attached to model results.
 
-## Known limitations
+It also evaluates the frozen predictions again after excluding held-out rows
+whose exact 11-feature identity appeared in train or validation. That view can
+reveal sensitivity to repeated benchmark records, but it cannot make the
+remaining slice representative, independent, or suitable for employment use.
 
-- Adult predicts an income label, not qualification, performance, or hiring
-  outcomes.
-- Its 1994 data reflects historical conditions and structural inequities.
-- Binary sex and race encodings erase identities and within-group variation.
-- The threshold policy uses a protected attribute offline and could be unlawful
-  or inappropriate in a real decision process.
-- Post-processing cannot repair biased labels, missing constructs, proxy
-  discrimination, or data-collection harms.
-- One seed and one model do not establish intervention stability.
-- Bootstrap intervals capture test-sample uncertainty, not dataset shift or
-  external validity.
-- The repository has no stakeholder process, legal review, appeal mechanism,
-  monitoring operation, or accountable decision owner.
+### Multiple views, no single score
 
-## Misuse prevention
+The audit keeps accuracy, TPR gap, FPR gap, SPD, DI, calibration, subgroup
+support, and review burden together. Improvements can conflict. A change that
+narrows TPR gap can widen FPR gap, alter selection rates, or move burden toward
+one intersectional group.
 
-Do not describe the output as candidate quality, use it to rank applicants, or
-deploy it for employment decisions. Any real project would require a valid and
-job-related target, representative prospective data, independent legal and
-domain review, affected-stakeholder participation, privacy and security
-engineering, human accountability, contestability, and validation in the
-intended context.
+### Uncertainty is part of the result
 
-## Version
+The paired bootstrap resamples the same held-out rows for baseline and adjusted
+policies while preserving label and policy-group cells. It estimates
+test-sample variability for that paired comparison. It does not cover a new
+population, a different dataset, model selection, the Census sample design, or
+unknown future shift.
 
-- Project version: `0.2.0`
-- Reference run: `xgb-seed-42-v1`
-- Last updated: 2026-08-28
+Intersectional rates use Wilson intervals. Weighted sensitivity uses Kish
+effective sample size and is labelled accordingly. Support thresholds change an
+evidence state, not the underlying observed count.
+
+### Stability is separate from sampling uncertainty
+
+Repeated-seed studies retrain and retune the system. They reveal sensitivity to
+the fit/validation split, estimator randomness, and policy selection. The runs
+share the official test partition and therefore are not independent test
+samples.
+
+### Offline drift is separate from both
+
+The monitoring reference stores aggregate held-out distributions and quantile
+sketches. A comparison can flag feature, score, selection, group-composition,
+and optional delayed-label shifts. It emits no p-values and does not identify a
+cause. `INSUFFICIENT_EVIDENCE` is distinct from `PASS`, while any configured
+violation produces `FAIL`.
+
+## Governance behavior
+
+The gate checks strict structure before policy criteria. A malformed report is
+an error, a valid threshold miss is a rejection, and only a report satisfying
+every configured check passes.
+
+Interval bounds, intersectional spans, and held-out review behavior can reject
+a run even when headline point metrics look acceptable. This is deliberate.
+Evidence should fail closed when its own uncertainty or weakest observed group
+contradicts the preferred story.
+
+The thresholds are repository policy, not universal definitions of fairness.
+They must not be presented as legal safe harbors.
+
+The offline drift gate is a second, independent evidence check. A policy-gate
+pass cannot override drift failure, and a drift pass cannot validate the model,
+dataset, or decision context.
+
+## Employment boundary
+
+Adult predicts an income category from historical Census-derived attributes.
+It provides no basis for claims about:
+
+- job analysis or essential functions;
+- applicant qualifications;
+- predictive validity for work performance;
+- business necessity;
+- accommodations or disability-related testing;
+- representative applicant flows;
+- candidate consent, notice, or privacy expectations;
+- the reliability of a human review process;
+- appeal, correction, and adverse-action procedures; or
+- outcomes after a decision.
+
+US employment guidance requires attention to the specific procedure, job, and
+validation evidence. Other jurisdictions add different requirements. See the
+primary sources in [`references.md`](references.md). Repository metrics cannot
+substitute for domain, legal, and affected-stakeholder review.
+
+## Misuse controls in the implementation
+
+- The feature contract excludes sex, race, `race_binary`, and `fnlwgt`.
+- The API rejects those fields and all extras.
+- The API uses the verb `simulate` and labels itself evaluation-only.
+- Group thresholds are persisted as offline-only and are not served.
+- Every response identifies the artifact and policy.
+- Rejected artifacts require an explicit research override.
+- Unknown categories fail instead of silently using an all-zero encoding.
+- Every bundle is atomically written and hash-bound before loading.
+- Raw and processed data-semantics evidence is verified and bound to each
+  canonical run.
+- Exact-overlap sensitivity keeps model scores and policy choices frozen and
+  preserves non-estimable novel-only evidence.
+- Every bundle contains a validated, hash-bound, aggregate-only monitoring
+  reference.
+- The generated report carries the gate verdict and its violations.
+
+These controls reduce accidental overstatement and policy confusion. They do
+not prevent a determined person from repurposing the code.
+
+## Requirements before any real high-impact use
+
+A real project would begin again with the intended context. At minimum it would
+need a defensible target, job-specific validation, representative prospective
+data, independent legal and domain review, affected-stakeholder participation,
+privacy and security engineering, accessibility and accommodations, monitored
+human decision quality, appeal and contestability, drift ownership, incident
+response, and an accountable authority able to stop the system.
+
+Those requirements cannot be satisfied by improving Adult benchmark metrics.

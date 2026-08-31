@@ -1,8 +1,1 @@
-prune src/metrics
-prune src/models
-prune src/plots
-prune src/preprocessing
-prune src/techniques
-prune src/utils
-
 global-exclude .DS_Store

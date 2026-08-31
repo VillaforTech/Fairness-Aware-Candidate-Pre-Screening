@@ -16,6 +16,7 @@ def compute_tpr_by_group(
     y_pred: np.ndarray,
     sensitive: np.ndarray,
     privileged_value: Any,
+    sample_weight: np.ndarray | None = None,
 ) -> dict[str, float]:
     """
     Compute TPR by sensitive group.
@@ -41,12 +42,19 @@ def compute_tpr_by_group(
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
     sensitive = np.asarray(sensitive)
+    weights = (
+        np.ones(len(y_true), dtype=float)
+        if sample_weight is None
+        else np.asarray(sample_weight, dtype=float)
+    )
+    if weights.ndim != 1 or len(weights) != len(y_true):
+        raise ValueError("sample_weight must be one-dimensional and match y_true")
 
     priv_mask = sensitive == privileged_value
     unpriv_mask = ~priv_mask
 
-    tpr_priv = true_positive_rate(y_true[priv_mask], y_pred[priv_mask])
-    tpr_unpriv = true_positive_rate(y_true[unpriv_mask], y_pred[unpriv_mask])
+    tpr_priv = true_positive_rate(y_true[priv_mask], y_pred[priv_mask], weights[priv_mask])
+    tpr_unpriv = true_positive_rate(y_true[unpriv_mask], y_pred[unpriv_mask], weights[unpriv_mask])
 
     return {
         "TPR_priv": tpr_priv,
@@ -61,6 +69,7 @@ def evaluate_predictions(
     sensitive: np.ndarray,
     privileged_group: Any,
     y_proba: np.ndarray | None = None,
+    sample_weight: np.ndarray | None = None,
 ) -> dict[str, Any]:
     """
     Compute all performance and fairness metrics for predictions.
@@ -94,13 +103,19 @@ def evaluate_predictions(
 
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
+    weights = None if sample_weight is None else np.asarray(sample_weight, dtype=float)
+    if weights is not None:
+        if weights.ndim != 1 or len(weights) != len(y_true):
+            raise ValueError("sample_weight must be one-dimensional and match y_true")
+        if not np.isfinite(weights).all() or (weights < 0).any() or weights.sum() <= 0:
+            raise ValueError("sample_weight must be finite, non-negative, and have positive sum")
 
     # Performance metrics
     metrics = {
-        "accuracy": accuracy_score(y_true, y_pred),
-        "precision": precision_score(y_true, y_pred, zero_division=0),
-        "recall": recall_score(y_true, y_pred, zero_division=0),
-        "f1": f1_score(y_true, y_pred, zero_division=0),
+        "accuracy": accuracy_score(y_true, y_pred, sample_weight=weights),
+        "precision": precision_score(y_true, y_pred, zero_division=0, sample_weight=weights),
+        "recall": recall_score(y_true, y_pred, zero_division=0, sample_weight=weights),
+        "f1": f1_score(y_true, y_pred, zero_division=0, sample_weight=weights),
     }
 
     # Probability-based metrics
@@ -112,14 +127,14 @@ def evaluate_predictions(
         )
 
         try:
-            metrics["roc_auc"] = roc_auc_score(y_true, y_proba)
+            metrics["roc_auc"] = roc_auc_score(y_true, y_proba, sample_weight=weights)
         except ValueError:
             metrics["roc_auc"] = None
         try:
-            metrics["pr_auc"] = average_precision_score(y_true, y_proba)
+            metrics["pr_auc"] = average_precision_score(y_true, y_proba, sample_weight=weights)
         except ValueError:
             metrics["pr_auc"] = None
-        metrics["brier_score"] = brier_score_loss(y_true, y_proba)
+        metrics["brier_score"] = brier_score_loss(y_true, y_proba, sample_weight=weights)
 
     # Fairness metrics
     fair = compute_fairness_metrics(
@@ -127,12 +142,20 @@ def evaluate_predictions(
         y_pred=y_pred,
         sensitive=sensitive,
         privileged_group=privileged_group,
+        sample_weight=weights,
     )
     metrics["SPD"] = fair["SPD"]
     metrics["DI"] = fair["DI"]
+    metrics["FPR_gap"] = fair["EO"]["FPR_gap"]
 
     # TPR by group
-    tpr_metrics = compute_tpr_by_group(y_true, y_pred, sensitive, privileged_group)
+    tpr_metrics = compute_tpr_by_group(
+        y_true,
+        y_pred,
+        sensitive,
+        privileged_group,
+        sample_weight=weights,
+    )
     metrics.update(tpr_metrics)
 
     return metrics

@@ -3,13 +3,15 @@
 import tempfile
 from pathlib import Path
 
+import pytest
+
 
 class TestConfig:
     """Tests for Config class."""
 
     def test_default_config(self):
         """Test default configuration values."""
-        from src.fairness_project.config import Config
+        from fairness_project.config import Config
 
         config = Config()
 
@@ -20,7 +22,7 @@ class TestConfig:
 
     def test_config_dataclass_fields(self):
         """Test that config has expected fields."""
-        from src.fairness_project.config import Config
+        from fairness_project.config import Config
 
         config = Config()
 
@@ -36,7 +38,8 @@ class TestSeedManagement:
     def test_set_seed(self):
         """Test that set_seed changes numpy random state."""
         import numpy as np
-        from src.fairness_project.config import set_seed
+
+        from fairness_project.config import set_seed
 
         set_seed(42)
         val1 = np.random.rand()
@@ -48,7 +51,7 @@ class TestSeedManagement:
 
     def test_get_random_state_from_config(self):
         """Test getting random state from config."""
-        from src.fairness_project.config import Config, get_random_state
+        from fairness_project.config import Config, get_random_state
 
         config = Config()
         config.seed = 123
@@ -57,7 +60,7 @@ class TestSeedManagement:
 
     def test_get_random_state_default(self):
         """Test default random state."""
-        from src.fairness_project.config import get_random_state
+        from fairness_project.config import get_random_state
 
         assert get_random_state(None) == 42
 
@@ -67,7 +70,7 @@ class TestConfigLoading:
 
     def test_config_from_dict(self):
         """Test creating config from dictionary."""
-        from src.fairness_project.config import config_from_dict
+        from fairness_project.config import config_from_dict
 
         data = {
             "seed": 123,
@@ -80,9 +83,23 @@ class TestConfigLoading:
         assert config.model.model_type == "lr"
         assert config.model.random_state == 123
 
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"unknown": True},
+            {"model": {"imaginary_parameter": 1}},
+            {"schema_version": "1.0"},
+        ],
+    )
+    def test_config_rejects_unknown_or_unsupported_keys(self, payload):
+        from fairness_project.config import config_from_dict
+
+        with pytest.raises(ValueError):
+            config_from_dict(payload)
+
     def test_load_yaml_config(self):
         """Test loading config from YAML file."""
-        from src.fairness_project.config import load_yaml_config
+        from fairness_project.config import load_yaml_config
 
         # Create temp YAML file
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -99,7 +116,7 @@ class TestConfigLoading:
 
     def test_load_config_returns_default_when_no_path(self):
         """Test that load_config returns default when path is None."""
-        from src.fairness_project.config import Config, load_config
+        from fairness_project.config import Config, load_config
 
         config = load_config(None)
 
@@ -108,7 +125,7 @@ class TestConfigLoading:
 
     def test_save_and_load_config_roundtrip(self):
         """Test saving and loading config produces same values."""
-        from src.fairness_project.config import Config, load_config, save_config
+        from fairness_project.config import Config, load_config, save_config
 
         original = Config()
         original.seed = 999
@@ -128,7 +145,7 @@ class TestGlobalConfig:
 
     def test_get_config_returns_default(self):
         """Test get_config returns default config."""
-        from src.fairness_project.config import Config, get_config
+        from fairness_project.config import Config, get_config
 
         config = get_config()
 
@@ -136,7 +153,7 @@ class TestGlobalConfig:
 
     def test_set_and_get_config(self):
         """Test setting and getting global config."""
-        from src.fairness_project.config import Config, get_config, set_config
+        from fairness_project.config import Config, get_config, set_config
 
         custom = Config()
         custom.seed = 777
@@ -148,7 +165,7 @@ class TestGlobalConfig:
 
     def test_init_config_with_seed_override(self):
         """Test init_config with seed override."""
-        from src.fairness_project.config import init_config
+        from fairness_project.config import init_config
 
         config = init_config(seed=555)
 

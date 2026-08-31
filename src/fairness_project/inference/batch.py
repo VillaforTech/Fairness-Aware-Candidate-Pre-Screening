@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 from pathlib import Path
 
 import pandas as pd
@@ -25,16 +26,22 @@ def run_batch_inference(
     frame = pd.read_csv(source)
     prediction = service.predict(frame)
     result = frame.copy()
-    result["prediction"] = prediction.predictions
+    result["prediction"] = [
+        None if int(value) == -1 else int(value) for value in prediction.predictions
+    ]
+    result["decision"] = prediction.decisions
     result["probability"] = prediction.probabilities
     result["decision_threshold"] = prediction.threshold
     result["decision_policy"] = prediction.policy_id
     result["artifact_id"] = prediction.artifact_id
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(destination.suffix + ".tmp")
-    result.to_csv(temporary, index=False)
-    os.replace(temporary, destination)
+    temporary = destination.parent / f".{destination.name}.tmp-{uuid.uuid4().hex}"
+    try:
+        result.to_csv(temporary, index=False)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
     return result
 
 
@@ -42,7 +49,7 @@ def main() -> None:
     """Standalone batch entry point."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run baseline batch inference")
+    parser = argparse.ArgumentParser(description="Run evaluation-only batch simulation")
     parser.add_argument("--run-dir", required=True)
     parser.add_argument("--input-csv", required=True)
     parser.add_argument("--output-csv", required=True)

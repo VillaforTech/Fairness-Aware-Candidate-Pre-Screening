@@ -68,7 +68,7 @@ def paired_bootstrap_intervals(
     strata = pd.Series(group.astype(str)) + "|" + pd.Series(truth.astype(str))
     stratum_indices = [indices.to_numpy() for _, indices in strata.groupby(strata).groups.items()]
     rng = np.random.default_rng(random_state)
-    metric_names = ("accuracy", "SPD", "DI", "TPR_gap")
+    metric_names = ("accuracy", "SPD", "DI", "TPR_gap", "FPR_gap")
     values: dict[str, dict[str, list[float]]] = {
         condition: {metric: [] for metric in metric_names}
         for condition in ("baseline", "adjusted", "change")
